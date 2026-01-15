@@ -1201,6 +1201,8 @@ def main():
         st.session_state.selected_property = None
     if 'use_mock_data' not in st.session_state:
         st.session_state.use_mock_data = True
+    if 'api_results' not in st.session_state:
+        st.session_state.api_results = []
     
     # Sidebar
     with st.sidebar:
@@ -1493,7 +1495,132 @@ def main():
     elif page == "🔍 Property Search":
         st.header("Property Search")
         
-        with st.expander("🔍 Search Filters", expanded=True):
+        # Show API search option if not using mock data
+        if not st.session_state.use_mock_data:
+            st.info("🔑 **API Mode Active** - Search real properties from RealEstateAPI.com")
+            
+            if not st.session_state.api_key:
+                st.warning("⚠️ Please enter your API key in the sidebar first!")
+            else:
+                with st.expander("🔍 API Search Filters", expanded=True):
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        api_city = st.selectbox("City", list(MICHIGAN_CITIES.keys()), key="api_city")
+                        api_min_price = st.number_input("Min Price", min_value=0, value=50000, step=10000, key="api_min")
+                    
+                    with col2:
+                        api_max_price = st.number_input("Max Price", min_value=0, value=200000, step=10000, key="api_max")
+                        api_beds = st.selectbox("Min Beds", [1, 2, 3, 4, 5], index=1, key="api_beds")
+                    
+                    with col3:
+                        api_distress = st.multiselect("Distress Filters", 
+                            ["Pre-Foreclosure", "Foreclosure", "Vacant", "Absentee Owner", "High Equity", "Tax Lien"],
+                            key="api_distress")
+                
+                if st.button("🔍 Search RealEstateAPI", type="primary", use_container_width=True):
+                    with st.spinner("Searching RealEstateAPI.com..."):
+                        api = RealEstateAPI(st.session_state.api_key)
+                        
+                        # Build search params
+                        params = api.build_michigan_search(
+                            city=api_city,
+                            min_price=api_min_price,
+                            max_price=api_max_price,
+                            min_beds=api_beds,
+                            distress_filters=api_distress if api_distress else None
+                        )
+                        
+                        results = api.property_search(params)
+                        
+                        if results and results.get('data'):
+                            st.success(f"✅ Found {len(results['data'])} properties!")
+                            
+                            # Save results to session state
+                            st.session_state.api_results = results['data']
+                        elif results and results.get('error'):
+                            st.error(f"API Error: {results.get('error')}")
+                        else:
+                            st.warning("No properties found. Try adjusting your filters.")
+                
+                # Display API results
+                if 'api_results' in st.session_state and st.session_state.api_results:
+                    st.markdown("---")
+                    st.subheader(f"API Results ({len(st.session_state.api_results)} properties)")
+                    
+                    for idx, prop in enumerate(st.session_state.api_results[:20]):  # Limit to 20
+                        with st.container(border=True):
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            
+                            # Extract address
+                            address_data = prop.get('address', {})
+                            if isinstance(address_data, dict):
+                                full_address = address_data.get('streetAddress', 'N/A')
+                                city_name = address_data.get('city', 'N/A')
+                                zip_code = address_data.get('zip', '')
+                            else:
+                                full_address = str(address_data)
+                                city_name = api_city
+                                zip_code = ''
+                            
+                            beds = prop.get('bedrooms', 0) or prop.get('beds', 0) or 3
+                            baths = prop.get('bathrooms', 0) or prop.get('baths', 0) or 2
+                            sqft = prop.get('squareFeet', 0) or prop.get('sqft', 0) or 1500
+                            est_value = prop.get('estimatedValue', 0) or prop.get('list_price', 0) or 100000
+                            
+                            with col1:
+                                st.markdown(f"**{full_address}**")
+                                st.caption(f"{city_name}, MI {zip_code}")
+                                st.write(f"🛏️ {beds} | 🚿 {baths} | 📐 {sqft:,} sqft")
+                            
+                            with col2:
+                                st.metric("Est. Value", f"${est_value:,}")
+                            
+                            with col3:
+                                if st.button("💾 Save Lead", key=f"api_save_{idx}"):
+                                    # Prepare property for saving
+                                    save_data = {
+                                        'id': prop.get('id', f"api_{idx}_{datetime.now().strftime('%H%M%S')}"),
+                                        'address': full_address,
+                                        'city': city_name,
+                                        'state': 'MI',
+                                        'zip': zip_code,
+                                        'beds': beds,
+                                        'baths': baths,
+                                        'sqft': sqft,
+                                        'year_built': prop.get('yearBuilt', 1980),
+                                        'list_price': est_value,
+                                        'estimated_value': est_value,
+                                        'arv': int(est_value * 1.2),
+                                        'equity_percent': prop.get('equityPercent', 50),
+                                        'lat': prop.get('latitude', 0) or prop.get('lat', 0),
+                                        'lng': prop.get('longitude', 0) or prop.get('lng', 0),
+                                        'distress_signals': [],
+                                        'owner_name': prop.get('owner', {}).get('name', '') if isinstance(prop.get('owner'), dict) else '',
+                                        'stage': 'New Lead'
+                                    }
+                                    
+                                    # Add distress signals
+                                    if prop.get('preForeclosure'):
+                                        save_data['distress_signals'].append('Pre-Foreclosure')
+                                    if prop.get('foreclosure'):
+                                        save_data['distress_signals'].append('Foreclosure')
+                                    if prop.get('vacant'):
+                                        save_data['distress_signals'].append('Vacant')
+                                    if prop.get('absenteeOwner'):
+                                        save_data['distress_signals'].append('Absentee Owner')
+                                    
+                                    priority = calculate_ai_priority_score(save_data)
+                                    save_property(save_data, priority)
+                                    st.success("✅ Saved!")
+                                    st.rerun()
+                
+                st.markdown("---")
+        
+        # Always show saved properties filter section
+        st.subheader("📋 Your Saved Properties")
+        
+        with st.expander("🔍 Filter Saved Properties", expanded=True):
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
@@ -1995,7 +2122,7 @@ def main():
         - ✅ Deal pipeline management
         - ✅ CMA report generation
         - ✅ Alert system
-""")
+        """)
 
 if __name__ == "__main__":
     main()
