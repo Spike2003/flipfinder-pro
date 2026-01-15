@@ -98,6 +98,122 @@ DISTRESS_SIGNALS = [
 
 PIPELINE_STAGES = ['New Lead', 'Contacted', 'Qualified', 'Offer Made', 'Under Contract', 'Closed', 'Dead/Lost']
 
+# ============================================================================
+# REALESTATEAPI.COM INTEGRATION
+# ============================================================================
+
+class RealEstateAPI:
+    """Integration with RealEstateAPI.com"""
+    
+    BASE_URL = "https://api.realestateapi.com/v2"
+    
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.headers = {
+            "x-api-key": api_key,
+            "Content-Type": "application/json"
+        }
+    
+    def property_search(self, params):
+        """Search for properties with given parameters"""
+        try:
+            response = requests.post(
+                f"{self.BASE_URL}/PropertySearch",
+                headers=self.headers,
+                json=params,
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            return {"error": str(e), "data": []}
+    
+    def property_detail(self, property_id):
+        """Get detailed info for a specific property"""
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/PropertyDetail",
+                headers=self.headers,
+                params={"id": property_id},
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            return {"error": str(e)}
+    
+    def property_comps(self, property_id, radius=1, limit=10):
+        """Get comparable properties"""
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/PropertyComps",
+                headers=self.headers,
+                params={
+                    "id": property_id,
+                    "radius": radius,
+                    "limit": limit
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            return {"error": str(e)}
+    
+    def skip_trace(self, property_id):
+        """Get owner contact information"""
+        try:
+            response = requests.get(
+                f"{self.BASE_URL}/SkipTrace",
+                headers=self.headers,
+                params={"id": property_id},
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            return {"error": str(e)}
+    
+    def build_michigan_search(self, city=None, min_price=None, max_price=None, 
+                               min_beds=None, property_type=None, distress_filters=None):
+        """Build search parameters for Michigan properties"""
+        params = {
+            "state": "MI",
+            "size": 50
+        }
+        
+        if city:
+            params["city"] = city
+        
+        if min_price:
+            params["minPrice"] = min_price
+        
+        if max_price:
+            params["maxPrice"] = max_price
+        
+        if min_beds:
+            params["minBeds"] = min_beds
+        
+        if property_type:
+            params["propertyType"] = property_type
+        
+        # Distress filters
+        if distress_filters:
+            if "Pre-Foreclosure" in distress_filters:
+                params["preForeclosure"] = True
+            if "Foreclosure" in distress_filters:
+                params["foreclosure"] = True
+            if "Vacant" in distress_filters:
+                params["vacant"] = True
+            if "Absentee Owner" in distress_filters:
+                params["absenteeOwner"] = True
+            if "High Equity" in distress_filters:
+                params["minEquityPercent"] = 50
+            if "Tax Lien" in distress_filters:
+                params["taxLien"] = True
+        
+        return params
+
 STREET_NAMES = [
     'Main St', 'Oak Ave', 'Maple Dr', 'Washington Blvd', 'Jefferson Ave',
     'Lincoln Rd', 'Park Place', 'Cedar Lane', 'Elm St', 'Pine Ave',
