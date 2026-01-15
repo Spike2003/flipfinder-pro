@@ -123,7 +123,14 @@ class RealEstateAPI:
                 json=params,
                 timeout=30
             )
-            response.raise_for_status()
+            
+            # Return error details if not successful
+            if response.status_code != 200:
+                return {
+                    "error": f"API returned status {response.status_code}: {response.text[:200]}",
+                    "data": []
+                }
+            
             return response.json()
         except requests.exceptions.RequestException as e:
             return {"error": str(e), "data": []}
@@ -131,28 +138,10 @@ class RealEstateAPI:
     def property_detail(self, property_id):
         """Get detailed info for a specific property"""
         try:
-            response = requests.get(
+            response = requests.post(
                 f"{self.BASE_URL}/PropertyDetail",
                 headers=self.headers,
-                params={"id": property_id},
-                timeout=30
-            )
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            return {"error": str(e)}
-    
-    def property_comps(self, property_id, radius=1, limit=10):
-        """Get comparable properties"""
-        try:
-            response = requests.get(
-                f"{self.BASE_URL}/PropertyComps",
-                headers=self.headers,
-                params={
-                    "id": property_id,
-                    "radius": radius,
-                    "limit": limit
-                },
+                json={"id": property_id},
                 timeout=30
             )
             response.raise_for_status()
@@ -163,10 +152,10 @@ class RealEstateAPI:
     def skip_trace(self, property_id):
         """Get owner contact information"""
         try:
-            response = requests.get(
+            response = requests.post(
                 f"{self.BASE_URL}/SkipTrace",
                 headers=self.headers,
-                params={"id": property_id},
+                json={"id": property_id},
                 timeout=30
             )
             response.raise_for_status()
@@ -176,28 +165,30 @@ class RealEstateAPI:
     
     def build_michigan_search(self, city=None, min_price=None, max_price=None, 
                                min_beds=None, property_type=None, distress_filters=None):
-        """Build search parameters for Michigan properties"""
+        """Build search parameters for Michigan properties using RealEstateAPI format"""
+        
+        # RealEstateAPI uses a specific query structure
         params = {
             "state": "MI",
-            "size": 50
+            "size": 25  # Number of results
         }
         
+        # Add city filter
         if city:
             params["city"] = city
         
-        if min_price:
-            params["minPrice"] = min_price
+        # Add price filters (use estimatedValue for property value)
+        if min_price and min_price > 0:
+            params["estimatedValue_min"] = min_price
         
-        if max_price:
-            params["maxPrice"] = max_price
+        if max_price and max_price > 0:
+            params["estimatedValue_max"] = max_price
         
-        if min_beds:
-            params["minBeds"] = min_beds
+        # Add bedroom filter (correct format from docs)
+        if min_beds and min_beds > 0:
+            params["bedrooms_min"] = min_beds
         
-        if property_type:
-            params["propertyType"] = property_type
-        
-        # Distress filters
+        # Add distress filters
         if distress_filters:
             if "Pre-Foreclosure" in distress_filters:
                 params["preForeclosure"] = True
@@ -208,7 +199,7 @@ class RealEstateAPI:
             if "Absentee Owner" in distress_filters:
                 params["absenteeOwner"] = True
             if "High Equity" in distress_filters:
-                params["minEquityPercent"] = 50
+                params["equity_min"] = 50
             if "Tax Lien" in distress_filters:
                 params["taxLien"] = True
         
@@ -1647,17 +1638,37 @@ def main():
                             distress_filters=api_distress if api_distress else None
                         )
                         
+                        # Show params for debugging
+                        with st.expander("🔧 Debug: API Request Parameters"):
+                            st.json(params)
+                        
                         results = api.property_search(params)
                         
-                        if results and results.get('data'):
-                            st.success(f"✅ Found {len(results['data'])} properties!")
-                            
-                            # Save results to session state
-                            st.session_state.api_results = results['data']
+                        # Show raw response for debugging
+                        with st.expander("🔧 Debug: API Response"):
+                            st.json(results)
+                        
+                        # Check for results in different possible structures
+                        data = None
+                        if results:
+                            # Try different response structures
+                            if isinstance(results, list):
+                                data = results
+                            elif results.get('data'):
+                                data = results['data']
+                            elif results.get('results'):
+                                data = results['results']
+                            elif results.get('properties'):
+                                data = results['properties']
+                        
+                        if data and len(data) > 0:
+                            st.success(f"✅ Found {len(data)} properties!")
+                            st.session_state.api_results = data
                         elif results and results.get('error'):
                             st.error(f"API Error: {results.get('error')}")
+                            st.info("💡 **Tip:** Check that your API key is correct and you have an active subscription.")
                         else:
-                            st.warning("No properties found. Try adjusting your filters.")
+                            st.warning("No properties found. Try adjusting your filters or check the debug info above.")
                 
                 # Display API results
                 if 'api_results' in st.session_state and st.session_state.api_results:
