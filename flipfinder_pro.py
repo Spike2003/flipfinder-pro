@@ -1241,6 +1241,176 @@ def main():
     st.caption("AI-Powered Michigan Fix & Flip Investment Platform")
     
     # =========================================================================
+    # PROPERTY DETAIL VIEW (Shows at top when property selected)
+    # =========================================================================
+    if st.session_state.selected_property:
+        prop_data = get_property_by_id(st.session_state.selected_property)
+        
+        if prop_data:
+            # Close button
+            if st.button("❌ Close Details & Go Back", type="secondary"):
+                st.session_state.selected_property = None
+                st.rerun()
+            
+            st.markdown("---")
+            
+            # Header
+            st.header(f"📍 {prop_data['address']}")
+            st.caption(f"{prop_data['city']}, MI {prop_data['zip']}")
+            
+            # Priority score
+            priority = calculate_ai_priority_score(prop_data)
+            tier_colors = {'HOT': '🔴', 'WARM': '🟠', 'NURTURE': '🔵', 'MONITOR': '⚪'}
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Priority Score", f"{priority['score']}/100")
+            with col2:
+                st.metric("Tier", f"{tier_colors.get(priority['tier'], '')} {priority['tier']}")
+            with col3:
+                st.metric("Stage", prop_data.get('stage', 'New Lead'))
+            
+            st.info(priority['ai_recommendation'])
+            
+            # Tabs for details
+            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                "📊 Overview", "💰 Deal Analysis", "🤖 AI Insights", 
+                "👤 Owner", "📞 Follow-ups", "📝 Notes"
+            ])
+            
+            with tab1:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**Property Details**")
+                    st.write(f"• Type: {prop_data.get('property_type', 'N/A')}")
+                    st.write(f"• Beds: {prop_data.get('beds', 'N/A')}")
+                    st.write(f"• Baths: {prop_data.get('baths', 'N/A')}")
+                    st.write(f"• Sqft: {prop_data.get('sqft', 0):,}")
+                    st.write(f"• Year: {prop_data.get('year_built', 'N/A')}")
+                    st.write(f"• Lot: {prop_data.get('lot_size', 0)} acres")
+                
+                with col2:
+                    st.markdown("**Financial Summary**")
+                    st.write(f"• List Price: ${prop_data.get('list_price', 0):,}")
+                    st.write(f"• Est. Value: ${prop_data.get('estimated_value', 0):,}")
+                    st.write(f"• ARV: ${prop_data.get('arv', 0):,}")
+                    st.write(f"• Equity: {prop_data.get('equity_percent', 0)}%")
+                    st.write(f"• Days on Market: {prop_data.get('days_on_market', 0)}")
+                
+                st.markdown("**Distress Signals**")
+                signals = prop_data.get('distress_signals', '')
+                if signals:
+                    for signal in signals.split(','):
+                        if signal.strip():
+                            st.write(f"⚠️ {signal.strip()}")
+                else:
+                    st.write("No distress signals detected")
+            
+            with tab2:
+                st.markdown("### 70% Rule Analysis")
+                fin = priority.get('financials', {})
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Max Offer", f"${fin.get('max_offer', 0):,.0f}")
+                with col2:
+                    st.metric("Est. Repairs", f"${fin.get('estimated_repairs', 0):,.0f}")
+                with col3:
+                    st.metric("ROI", f"{fin.get('roi', 0):.1f}%")
+                with col4:
+                    st.metric("Net Profit", f"${fin.get('net_profit', 0):,.0f}")
+                
+                st.markdown("### Scoring Breakdown")
+                for factor in priority.get('factors', []):
+                    st.write(f"✓ {factor['name']}: +{factor['points']} pts")
+            
+            with tab3:
+                st.markdown("### AI Insights")
+                for insight in priority.get('ai_insights', []):
+                    st.info(insight)
+                
+                st.markdown("### Neighborhood Analysis")
+                neighborhood = analyze_neighborhood(prop_data.get('city', 'Detroit'))
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Neighborhood Score", f"{neighborhood['score']}/100")
+                    st.metric("Investment Grade", neighborhood['grade'])
+                with col2:
+                    st.write(neighborhood['investment_outlook'])
+                
+                st.markdown("### AI ARV Prediction")
+                arv_pred = predict_arv(prop_data, prop_data.get('city', 'Detroit'))
+                st.metric("Predicted ARV", f"${arv_pred['predicted_arv']:,}")
+                st.caption(f"Range: ${arv_pred['low_estimate']:,} - ${arv_pred['high_estimate']:,} ({arv_pred['confidence']}% confidence)")
+            
+            with tab4:
+                st.markdown("### Owner Information")
+                st.write(f"**Name:** {prop_data.get('owner_name', 'N/A')}")
+                st.write(f"**Phone:** {prop_data.get('owner_phone', 'N/A') or 'Not available'}")
+                st.write(f"**Email:** {prop_data.get('owner_email', 'N/A') or 'Not available'}")
+                st.write(f"**Mailing:** {prop_data.get('owner_mailing', 'N/A')}")
+                st.write(f"**Ownership:** {prop_data.get('ownership_years', 0)} years")
+            
+            with tab5:
+                st.markdown("### Schedule Follow-up")
+                col1, col2 = st.columns(2)
+                with col1:
+                    fu_type = st.selectbox("Type", ["📞 Call", "✉️ Email", "💬 Text", "📬 Mail", "🚗 Door Knock"])
+                    fu_date = st.date_input("Date")
+                with col2:
+                    fu_time = st.time_input("Time")
+                    fu_assignee = st.text_input("Assign to")
+                
+                if st.button("➕ Add Follow-up"):
+                    add_followup(st.session_state.selected_property, fu_type, str(fu_date), str(fu_time), fu_assignee)
+                    st.success("✅ Follow-up scheduled!")
+                
+                st.markdown("### Scheduled Follow-ups")
+                followups = get_followups(st.session_state.selected_property)
+                if not followups.empty:
+                    for _, fu in followups.iterrows():
+                        st.write(f"• {fu['type']} - {fu['date']} {fu['time']}")
+                else:
+                    st.info("No follow-ups scheduled")
+            
+            with tab6:
+                st.markdown("### Add Note")
+                new_note = st.text_area("Note content")
+                if st.button("➕ Add Note"):
+                    if new_note:
+                        add_note(st.session_state.selected_property, new_note)
+                        st.success("✅ Note added!")
+                        st.rerun()
+                
+                st.markdown("### Notes History")
+                notes = get_notes(st.session_state.selected_property)
+                if not notes.empty:
+                    for _, note in notes.iterrows():
+                        with st.container(border=True):
+                            st.caption(f"{note['author']} - {note['created_at']}")
+                            st.write(note['content'])
+                else:
+                    st.info("No notes yet")
+            
+            # CMA Download
+            st.markdown("---")
+            if st.button("📄 Generate CMA Report", type="primary"):
+                pdf_buffer = generate_cma_pdf(prop_data, priority)
+                st.download_button(
+                    label="📥 Download CMA PDF",
+                    data=pdf_buffer,
+                    file_name=f"CMA_{prop_data['address'].replace(' ', '_')}.pdf",
+                    mime="application/pdf"
+                )
+            
+            st.markdown("---")
+            st.markdown("---")
+        
+        # Stop here - don't show the regular pages when viewing details
+        st.stop()
+    
+    # =========================================================================
     # DASHBOARD
     # =========================================================================
     if page == "🏠 Dashboard":
@@ -1827,164 +1997,5 @@ def main():
         - ✅ Alert system
         """)
     
-    # =========================================================================
-    # PROPERTY DETAIL MODAL
-    # =========================================================================
-    if st.session_state.selected_property:
-        prop_data = get_property_by_id(st.session_state.selected_property)
-        
-        if prop_data:
-            st.markdown("---")
-            
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.header(f"📍 {prop_data['address']}")
-                st.caption(f"{prop_data['city']}, MI {prop_data['zip']}")
-            with col2:
-                if st.button("❌ Close"):
-                    st.session_state.selected_property = None
-                    st.rerun()
-            
-            # Priority score
-            priority = calculate_ai_priority_score(prop_data)
-            tier_colors = {'HOT': '🔴', 'WARM': '🟠', 'NURTURE': '🔵', 'MONITOR': '⚪'}
-            
-            st.markdown(f"### {tier_colors.get(priority['tier'], '')} Priority: {priority['score']}/100 ({priority['tier']})")
-            st.info(priority['ai_recommendation'])
-            
-            # Tabs
-            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-                "📊 Overview", "💰 Deal Analysis", "🤖 AI Insights", 
-                "👤 Owner", "📞 Follow-ups", "📝 Notes"
-            ])
-            
-            with tab1:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("**Property Details**")
-                    st.write(f"• Type: {prop_data.get('property_type', 'N/A')}")
-                    st.write(f"• Beds: {prop_data.get('beds', 'N/A')}")
-                    st.write(f"• Baths: {prop_data.get('baths', 'N/A')}")
-                    st.write(f"• Sqft: {prop_data.get('sqft', 0):,}")
-                    st.write(f"• Year: {prop_data.get('year_built', 'N/A')}")
-                    st.write(f"• Lot: {prop_data.get('lot_size', 0)} acres")
-                
-                with col2:
-                    st.markdown("**Financial Summary**")
-                    st.write(f"• List Price: ${prop_data.get('list_price', 0):,}")
-                    st.write(f"• Est. Value: ${prop_data.get('estimated_value', 0):,}")
-                    st.write(f"• ARV: ${prop_data.get('arv', 0):,}")
-                    st.write(f"• Equity: {prop_data.get('equity_percent', 0)}%")
-                    st.write(f"• Days on Market: {prop_data.get('days_on_market', 0)}")
-                
-                st.markdown("**Distress Signals**")
-                signals = prop_data.get('distress_signals', '')
-                if signals:
-                    for signal in signals.split(','):
-                        if signal.strip():
-                            st.write(f"⚠️ {signal.strip()}")
-                else:
-                    st.write("No distress signals detected")
-            
-            with tab2:
-                st.markdown("### 70% Rule Analysis")
-                fin = priority.get('financials', {})
-                
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Max Offer", f"${fin.get('max_offer', 0):,.0f}")
-                with col2:
-                    st.metric("Est. Repairs", f"${fin.get('estimated_repairs', 0):,.0f}")
-                with col3:
-                    st.metric("ROI", f"{fin.get('roi', 0):.1f}%")
-                with col4:
-                    st.metric("Net Profit", f"${fin.get('net_profit', 0):,.0f}")
-                
-                st.markdown("### Scoring Breakdown")
-                for factor in priority.get('factors', []):
-                    st.write(f"✓ {factor['name']}: +{factor['points']} pts")
-            
-            with tab3:
-                st.markdown("### AI Insights")
-                for insight in priority.get('ai_insights', []):
-                    st.info(insight)
-                
-                # Neighborhood analysis
-                st.markdown("### Neighborhood Analysis")
-                neighborhood = analyze_neighborhood(prop_data.get('city', 'Detroit'))
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Neighborhood Score", f"{neighborhood['score']}/100")
-                    st.metric("Investment Grade", neighborhood['grade'])
-                with col2:
-                    st.write(neighborhood['investment_outlook'])
-                
-                # ARV prediction
-                st.markdown("### AI ARV Prediction")
-                arv_pred = predict_arv(prop_data, prop_data.get('city', 'Detroit'))
-                st.metric("Predicted ARV", f"${arv_pred['predicted_arv']:,}")
-                st.caption(f"Range: ${arv_pred['low_estimate']:,} - ${arv_pred['high_estimate']:,} ({arv_pred['confidence']}% confidence)")
-            
-            with tab4:
-                st.markdown("### Owner Information")
-                st.write(f"**Name:** {prop_data.get('owner_name', 'N/A')}")
-                st.write(f"**Phone:** {prop_data.get('owner_phone', 'N/A') or 'Not available'}")
-                st.write(f"**Email:** {prop_data.get('owner_email', 'N/A') or 'Not available'}")
-                st.write(f"**Mailing:** {prop_data.get('owner_mailing', 'N/A')}")
-                st.write(f"**Ownership:** {prop_data.get('ownership_years', 0)} years")
-            
-            with tab5:
-                st.markdown("### Schedule Follow-up")
-                col1, col2 = st.columns(2)
-                with col1:
-                    fu_type = st.selectbox("Type", ["📞 Call", "✉️ Email", "💬 Text", "📬 Mail", "🚗 Door Knock"])
-                    fu_date = st.date_input("Date")
-                with col2:
-                    fu_time = st.time_input("Time")
-                    fu_assignee = st.text_input("Assign to")
-                
-                if st.button("➕ Add Follow-up"):
-                    add_followup(st.session_state.selected_property, fu_type, str(fu_date), str(fu_time), fu_assignee)
-                    st.success("✅ Follow-up scheduled!")
-                
-                st.markdown("### Scheduled Follow-ups")
-                followups = get_followups(st.session_state.selected_property)
-                if not followups.empty:
-                    for _, fu in followups.iterrows():
-                        st.write(f"• {fu['type']} - {fu['date']} {fu['time']}")
-                else:
-                    st.info("No follow-ups scheduled")
-            
-            with tab6:
-                st.markdown("### Add Note")
-                new_note = st.text_area("Note content")
-                if st.button("➕ Add Note"):
-                    if new_note:
-                        add_note(st.session_state.selected_property, new_note)
-                        st.success("✅ Note added!")
-                        st.rerun()
-                
-                st.markdown("### Notes History")
-                notes = get_notes(st.session_state.selected_property)
-                if not notes.empty:
-                    for _, note in notes.iterrows():
-                        with st.container(border=True):
-                            st.caption(f"{note['author']} - {note['created_at']}")
-                            st.write(note['content'])
-                else:
-                    st.info("No notes yet")
-            
-            # CMA Download
-            st.markdown("---")
-            if st.button("📄 Generate CMA Report"):
-                pdf_buffer = generate_cma_pdf(prop_data, priority)
-                st.download_button(
-                    label="📥 Download CMA PDF",
-                    data=pdf_buffer,
-                    file_name=f"CMA_{prop_data['address'].replace(' ', '_')}.pdf",
-                    mime="application/pdf"
-                )
-
-if __name__ == "__main__":
+    if __name__ == "__main__":
     main()
