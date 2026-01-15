@@ -1995,7 +1995,7 @@ def main():
         - ✅ Deal pipeline management
         - ✅ CMA report generation
         - ✅ Alert system
-        """)
-    
-    if __name__ == "__main__":
+""")
+
+if __name__ == "__main__":
     main()
