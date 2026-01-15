@@ -167,28 +167,21 @@ class RealEstateAPI:
                                min_beds=None, property_type=None, distress_filters=None):
         """Build search parameters for Michigan properties using RealEstateAPI format"""
         
-        # RealEstateAPI uses a specific query structure
+        # Start with minimal params that should definitely work
         params = {
             "state": "MI",
-            "size": 25  # Number of results
+            "size": 25
         }
         
         # Add city filter
         if city:
             params["city"] = city
         
-        # Add price filters (use estimatedValue for property value)
-        if min_price and min_price > 0:
-            params["estimatedValue_min"] = min_price
-        
-        if max_price and max_price > 0:
-            params["estimatedValue_max"] = max_price
-        
-        # Add bedroom filter (correct format from docs)
+        # Add bedroom filter (confirmed from docs)
         if min_beds and min_beds > 0:
             params["bedrooms_min"] = min_beds
         
-        # Add distress filters
+        # Add distress filters (these should work based on API docs)
         if distress_filters:
             if "Pre-Foreclosure" in distress_filters:
                 params["preForeclosure"] = True
@@ -198,10 +191,9 @@ class RealEstateAPI:
                 params["vacant"] = True
             if "Absentee Owner" in distress_filters:
                 params["absenteeOwner"] = True
-            if "High Equity" in distress_filters:
-                params["equity_min"] = 50
-            if "Tax Lien" in distress_filters:
-                params["taxLien"] = True
+        
+        # Note: Price filters removed for now - need to find correct param names
+        # Will add back once we confirm basic search works
         
         return params
 
@@ -1610,20 +1602,17 @@ def main():
                 st.warning("⚠️ Please enter your API key in the sidebar first!")
             else:
                 with st.expander("🔍 API Search Filters", expanded=True):
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2 = st.columns(2)
                     
                     with col1:
                         api_city = st.selectbox("City", list(MICHIGAN_CITIES.keys()), key="api_city")
-                        api_min_price = st.number_input("Min Price", min_value=0, value=50000, step=10000, key="api_min")
-                    
-                    with col2:
-                        api_max_price = st.number_input("Max Price", min_value=0, value=200000, step=10000, key="api_max")
                         api_beds = st.selectbox("Min Beds", [1, 2, 3, 4, 5], index=1, key="api_beds")
                     
-                    with col3:
+                    with col2:
                         api_distress = st.multiselect("Distress Filters", 
-                            ["Pre-Foreclosure", "Foreclosure", "Vacant", "Absentee Owner", "High Equity", "Tax Lien"],
+                            ["Pre-Foreclosure", "Foreclosure", "Vacant", "Absentee Owner"],
                             key="api_distress")
+                        st.caption("💡 Price filters temporarily disabled while we verify API params")
                 
                 if st.button("🔍 Search RealEstateAPI", type="primary", use_container_width=True):
                     with st.spinner("Searching RealEstateAPI.com..."):
@@ -1632,8 +1621,6 @@ def main():
                         # Build search params
                         params = api.build_michigan_search(
                             city=api_city,
-                            min_price=api_min_price,
-                            max_price=api_max_price,
                             min_beds=api_beds,
                             distress_filters=api_distress if api_distress else None
                         )
