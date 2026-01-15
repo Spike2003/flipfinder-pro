@@ -1112,6 +1112,35 @@ def main():
             st.header(f"📍 {prop_data['address']}")
             st.caption(f"{prop_data['city']}, MI {prop_data['zip']}")
             
+            # External Links Section
+            full_address = f"{prop_data['address']}, {prop_data['city']}, MI {prop_data['zip']}"
+            encoded_address = full_address.replace(' ', '+').replace(',', '%2C')
+            
+            st.markdown("##### 🔗 View Property On:")
+            link_col1, link_col2, link_col3, link_col4, link_col5 = st.columns(5)
+            
+            with link_col1:
+                zillow_url = f"https://www.zillow.com/homes/{encoded_address}_rb/"
+                st.link_button("🏠 Zillow", zillow_url)
+            
+            with link_col2:
+                realtor_url = f"https://www.realtor.com/realestateandhomes-search/{prop_data['city'].replace(' ', '-')}_MI/address-{prop_data['address'].replace(' ', '-')}"
+                st.link_button("🔑 Realtor", realtor_url)
+            
+            with link_col3:
+                redfin_url = f"https://www.redfin.com/city/{prop_data['city'].replace(' ', '-')}-MI/filter/keyword={encoded_address}"
+                st.link_button("🔴 Redfin", redfin_url)
+            
+            with link_col4:
+                google_maps_url = f"https://www.google.com/maps/search/{encoded_address}"
+                st.link_button("🗺️ Google Maps", google_maps_url)
+            
+            with link_col5:
+                street_view_url = f"https://www.google.com/maps/@?api=1&map_action=pano&viewpoint={prop_data.get('lat', 42.3314)},{prop_data.get('lng', -83.0458)}"
+                st.link_button("📷 Street View", street_view_url)
+            
+            st.markdown("---")
+            
             priority = calculate_ai_priority_score(prop_data)
             tier_colors = {'HOT': '🔴', 'WARM': '🟠', 'NURTURE': '🔵', 'MONITOR': '⚪'}
             
@@ -1125,7 +1154,7 @@ def main():
             
             st.info(priority['ai_recommendation'])
             
-            tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "💰 Deal Analysis", "👤 Owner", "📝 Notes"])
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Overview", "💰 Deal Analysis", "👤 Owner", "📝 Notes", "🌐 Resources"])
             
             with tab1:
                 col1, col2 = st.columns(2)
@@ -1160,6 +1189,19 @@ def main():
                 st.write(f"**Name:** {prop_data.get('owner_name', 'N/A')}")
                 st.write(f"**Phone:** {prop_data.get('owner_phone', 'N/A') or 'Not available'}")
                 st.write(f"**Email:** {prop_data.get('owner_email', 'N/A') or 'Not available'}")
+                
+                # Skip Trace button if API key available
+                if st.session_state.api_key and not st.session_state.use_mock_data:
+                    st.markdown("---")
+                    if st.button("🔍 Skip Trace (Get Contact Info)", type="primary"):
+                        with st.spinner("Running skip trace..."):
+                            api = RealEstateAPI(st.session_state.api_key)
+                            result = api.skip_trace(prop_data.get('id', ''))
+                            if result and not result.get('error'):
+                                st.success("✅ Skip trace complete!")
+                                st.json(result)
+                            else:
+                                st.error(f"Skip trace failed: {result.get('error', 'Unknown error')}")
             
             with tab4:
                 new_note = st.text_area("Add Note")
@@ -1175,6 +1217,69 @@ def main():
                         st.caption(f"{note['created_at']}")
                         st.write(note['content'])
                         st.markdown("---")
+            
+            with tab5:
+                st.markdown("### 🌐 External Resources")
+                
+                full_address = f"{prop_data['address']}, {prop_data['city']}, MI {prop_data['zip']}"
+                encoded_address = full_address.replace(' ', '+').replace(',', '%2C')
+                
+                st.markdown("**🏠 Property Listings:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.link_button("Zillow", f"https://www.zillow.com/homes/{encoded_address}_rb/", use_container_width=True)
+                    st.link_button("Trulia", f"https://www.trulia.com/for_sale/{prop_data['city'].replace(' ', '_')},MI/{prop_data['address'].replace(' ', '_')}", use_container_width=True)
+                with col2:
+                    st.link_button("Realtor.com", f"https://www.realtor.com/realestateandhomes-search/{encoded_address}", use_container_width=True)
+                    st.link_button("Homes.com", f"https://www.homes.com/property/{encoded_address}", use_container_width=True)
+                with col3:
+                    st.link_button("Redfin", f"https://www.redfin.com/city/{prop_data['city'].replace(' ', '-')}-MI", use_container_width=True)
+                    st.link_button("Movoto", f"https://www.movoto.com/mi/{prop_data['city'].lower().replace(' ', '-')}/", use_container_width=True)
+                
+                st.markdown("---")
+                st.markdown("**🗺️ Maps & Street View:**")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.link_button("Google Maps", f"https://www.google.com/maps/search/{encoded_address}", use_container_width=True)
+                with col2:
+                    lat = prop_data.get('lat', 42.3314) or 42.3314
+                    lng = prop_data.get('lng', -83.0458) or -83.0458
+                    st.link_button("Street View", f"https://www.google.com/maps/@{lat},{lng},3a,75y,90t/data=!3m6!1e1!3m4!1s!2e0!7i16384!8i8192", use_container_width=True)
+                with col3:
+                    st.link_button("Bing Maps", f"https://www.bing.com/maps?q={encoded_address}", use_container_width=True)
+                
+                st.markdown("---")
+                st.markdown("**📋 Public Records (Michigan):**")
+                
+                # Michigan County Assessor links
+                county_links = {
+                    'Detroit': 'https://detroitmi.gov/departments/office-chief-financial-officer/ocfo-divisions/office-assessor',
+                    'Wayne County': 'https://www.waynecounty.com/elected/register/property-search.aspx',
+                    'Oakland County': 'https://www.oakgov.com/re/Pages/default.aspx',
+                    'Macomb County': 'https://www.macombcountymi.gov/equalization/',
+                    'Kent County': 'https://www.accesskent.com/PropertyRecordSearch/',
+                    'Genesee County': 'https://www.gc4me.com/departments/equalization/property_search.php',
+                    'Washtenaw County': 'https://www.washtenaw.org/297/Equalization',
+                    'Ingham County': 'https://www.ingham.org/equalization/',
+                }
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.link_button("🔍 BS&A Online (MI Property Search)", "https://bsaonline.com/", use_container_width=True)
+                    st.link_button("📊 MI Property Tax Estimator", "https://treas-secure.state.mi.us/ptestimator/", use_container_width=True)
+                with col2:
+                    st.link_button("📜 MI Deeds & Records", "https://www.michigan.gov/sos", use_container_width=True)
+                    st.link_button("🏛️ County Register of Deeds", f"https://www.google.com/search?q={prop_data['city']}+michigan+register+of+deeds", use_container_width=True)
+                
+                st.markdown("---")
+                st.markdown("**💰 Valuation & Market Data:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.link_button("📈 Zillow Zestimate", f"https://www.zillow.com/homes/{encoded_address}_rb/", use_container_width=True)
+                    st.link_button("📊 Redfin Estimate", f"https://www.redfin.com/city/{prop_data['city'].replace(' ', '-')}-MI", use_container_width=True)
+                with col2:
+                    st.link_button("🏠 Realtor.com Value", f"https://www.realtor.com/realestateandhomes-search/{encoded_address}", use_container_width=True)
+                    st.link_button("📉 ATTOM Data", "https://www.attomdata.com/", use_container_width=True)
             
             if st.button("📄 Generate CMA Report", type="primary"):
                 pdf_buffer = generate_cma_pdf(prop_data, priority)
