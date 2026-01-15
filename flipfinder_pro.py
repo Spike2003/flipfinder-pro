@@ -36,7 +36,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS
 st.markdown("""
 <style>
     .stMetric {
@@ -50,12 +50,6 @@ st.markdown("""
         padding: 10px;
         border-radius: 8px;
         margin: 5px 0;
-    }
-    .stat-card {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     div[data-testid="stMetricValue"] {
         font-size: 28px;
@@ -98,6 +92,18 @@ DISTRESS_SIGNALS = [
 
 PIPELINE_STAGES = ['New Lead', 'Contacted', 'Qualified', 'Offer Made', 'Under Contract', 'Closed', 'Dead/Lost']
 
+STREET_NAMES = [
+    'Main St', 'Oak Ave', 'Maple Dr', 'Washington Blvd', 'Jefferson Ave',
+    'Lincoln Rd', 'Park Place', 'Cedar Lane', 'Elm St', 'Pine Ave',
+    'Highland Dr', 'Lake Shore Dr', 'River Rd', 'Forest Ave', 'Sunset Blvd'
+]
+
+FIRST_NAMES = ['James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer', 'Michael', 'Linda', 
+               'William', 'Barbara', 'David', 'Elizabeth', 'Richard', 'Susan', 'Joseph', 'Jessica']
+
+LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis',
+              'Rodriguez', 'Martinez', 'Anderson', 'Taylor', 'Thomas', 'Moore', 'Jackson', 'Martin']
+
 # ============================================================================
 # REALESTATEAPI.COM INTEGRATION
 # ============================================================================
@@ -124,10 +130,9 @@ class RealEstateAPI:
                 timeout=30
             )
             
-            # Return error details if not successful
             if response.status_code != 200:
                 return {
-                    "error": f"API returned status {response.status_code}: {response.text[:200]}",
+                    "error": f"API returned status {response.status_code}: {response.text[:500]}",
                     "data": []
                 }
             
@@ -144,8 +149,9 @@ class RealEstateAPI:
                 json={"id": property_id},
                 timeout=30
             )
-            response.raise_for_status()
-            return response.json()
+            if response.status_code == 200:
+                return response.json()
+            return {"error": f"Status {response.status_code}"}
         except requests.exceptions.RequestException as e:
             return {"error": str(e)}
     
@@ -158,72 +164,24 @@ class RealEstateAPI:
                 json={"id": property_id},
                 timeout=30
             )
-            response.raise_for_status()
-            return response.json()
+            if response.status_code == 200:
+                return response.json()
+            return {"error": f"Status {response.status_code}"}
         except requests.exceptions.RequestException as e:
             return {"error": str(e)}
-    
-    def build_michigan_search(self, city=None, min_price=None, max_price=None, 
-                               min_beds=None, property_type=None, distress_filters=None):
-        """Build search parameters for Michigan properties using RealEstateAPI format"""
-        
-        # Start with minimal params that should definitely work
-        params = {
-            "state": "MI",
-            "size": 25
-        }
-        
-        # Add city filter
-        if city:
-            params["city"] = city
-        
-        # Add bedroom filter (confirmed from docs)
-        if min_beds and min_beds > 0:
-            params["bedrooms_min"] = min_beds
-        
-        # Add distress filters (these should work based on API docs)
-        if distress_filters:
-            if "Pre-Foreclosure" in distress_filters:
-                params["preForeclosure"] = True
-            if "Foreclosure" in distress_filters:
-                params["foreclosure"] = True
-            if "Vacant" in distress_filters:
-                params["vacant"] = True
-            if "Absentee Owner" in distress_filters:
-                params["absenteeOwner"] = True
-        
-        # Note: Price filters removed for now - need to find correct param names
-        # Will add back once we confirm basic search works
-        
-        return params
-
-STREET_NAMES = [
-    'Main St', 'Oak Ave', 'Maple Dr', 'Washington Blvd', 'Jefferson Ave',
-    'Lincoln Rd', 'Park Place', 'Cedar Lane', 'Elm St', 'Pine Ave',
-    'Highland Dr', 'Lake Shore Dr', 'River Rd', 'Forest Ave', 'Sunset Blvd',
-    'Cherry Lane', 'Birch St', 'Willow Way', 'Spruce Dr', 'Hickory Rd'
-]
-
-FIRST_NAMES = ['James', 'Mary', 'John', 'Patricia', 'Robert', 'Jennifer', 'Michael', 'Linda', 
-               'William', 'Barbara', 'David', 'Elizabeth', 'Richard', 'Susan', 'Joseph', 'Jessica']
-
-LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis',
-              'Rodriguez', 'Martinez', 'Anderson', 'Taylor', 'Thomas', 'Moore', 'Jackson', 'Martin']
 
 # ============================================================================
 # DATABASE SETUP
 # ============================================================================
 
 def get_db_path():
-    """Get database path - works locally and on cloud"""
     return 'flipfinder.db'
 
 def init_database():
-    """Initialize SQLite database for data persistence"""
+    """Initialize SQLite database"""
     conn = sqlite3.connect(get_db_path())
     c = conn.cursor()
     
-    # Properties table
     c.execute('''CREATE TABLE IF NOT EXISTS properties (
         id TEXT PRIMARY KEY,
         address TEXT,
@@ -239,7 +197,6 @@ def init_database():
         list_price INTEGER,
         estimated_value INTEGER,
         arv INTEGER,
-        predicted_arv INTEGER,
         mortgage_balance INTEGER,
         equity INTEGER,
         equity_percent INTEGER,
@@ -259,11 +216,9 @@ def init_database():
         priority_tier TEXT,
         neighborhood_score INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        raw_data TEXT
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     
-    # Follow-ups table
     c.execute('''CREATE TABLE IF NOT EXISTS followups (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         property_id TEXT,
@@ -272,23 +227,18 @@ def init_database():
         time TEXT,
         assignee TEXT,
         status TEXT DEFAULT 'pending',
-        outcome TEXT,
         notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (property_id) REFERENCES properties (id)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     
-    # Notes table
     c.execute('''CREATE TABLE IF NOT EXISTS notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         property_id TEXT,
         content TEXT,
         author TEXT DEFAULT 'User',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (property_id) REFERENCES properties (id)
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     
-    # Alerts table
     c.execute('''CREATE TABLE IF NOT EXISTS alerts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         type TEXT,
@@ -297,15 +247,6 @@ def init_database():
         message TEXT,
         priority TEXT,
         read INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    # Activity log
-    c.execute('''CREATE TABLE IF NOT EXISTS activity_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        action TEXT,
-        property_id TEXT,
-        details TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     
@@ -324,24 +265,20 @@ def generate_mock_properties(count=50):
         city = random.choice(list(MICHIGAN_CITIES.keys()))
         city_data = MICHIGAN_CITIES[city]
         
-        # Generate realistic property data
         beds = random.choices([2, 3, 4, 5], weights=[15, 45, 30, 10])[0]
         baths = random.choices([1, 1.5, 2, 2.5, 3], weights=[10, 20, 40, 20, 10])[0]
         sqft = random.randint(800, 3500)
         year_built = random.randint(1920, 2015)
         lot_size = round(random.uniform(0.1, 0.8), 2)
         
-        # Price based on city median with variation
         base_price = city_data['median_price']
         price_variance = random.uniform(0.5, 1.5)
-        sqft_factor = sqft / 1500  # Adjust for size
+        sqft_factor = sqft / 1500
         list_price = int(base_price * price_variance * sqft_factor)
         
-        # Generate distress signals (weighted toward motivated sellers)
         num_signals = random.choices([0, 1, 2, 3, 4, 5], weights=[20, 25, 25, 15, 10, 5])[0]
         signals = random.sample(DISTRESS_SIGNALS, min(num_signals, len(DISTRESS_SIGNALS)))
         
-        # Equity calculation
         ownership_years = random.randint(1, 30)
         if ownership_years > 15:
             equity_percent = random.randint(70, 100)
@@ -350,32 +287,25 @@ def generate_mock_properties(count=50):
         else:
             equity_percent = random.randint(10, 50)
         
-        # Days on market (higher for distressed)
         if 'Foreclosure' in signals or 'Pre-Foreclosure' in signals:
             days_on_market = random.randint(60, 180)
         else:
             days_on_market = random.randint(5, 120)
         
-        # Price reductions
         price_reductions = random.choices([0, 1, 2, 3], weights=[50, 30, 15, 5])[0]
         
-        # Generate address
         street_num = random.randint(100, 9999)
         street = random.choice(STREET_NAMES)
         address = f"{street_num} {street}"
         
-        # Generate owner
         owner_name = f"{random.choice(FIRST_NAMES)} {random.choice(LAST_NAMES)}"
         
-        # Coordinates with slight randomization around city center
         lat = city_data['lat'] + random.uniform(-0.05, 0.05)
         lng = city_data['lng'] + random.uniform(-0.05, 0.05)
         
-        # Generate phone (some missing to simulate real data)
         has_phone = random.random() > 0.3
         phone = f"({random.randint(200,999)}) {random.randint(200,999)}-{random.randint(1000,9999)}" if has_phone else ""
         
-        # Generate email (some missing)
         has_email = random.random() > 0.5
         email_domains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com']
         email = f"{owner_name.lower().replace(' ', '.')}@{random.choice(email_domains)}" if has_email else ""
@@ -431,14 +361,12 @@ def load_mock_data():
             prop['neighborhood_score'] = neighborhood['score']
             save_property(prop, priority)
         
-        # Generate some alerts
         generate_mock_alerts()
-        
         return True
     return False
 
 def generate_mock_alerts():
-    """Generate mock alerts for demo"""
+    """Generate mock alerts"""
     conn = sqlite3.connect(get_db_path())
     c = conn.cursor()
     
@@ -467,7 +395,6 @@ def calculate_ai_priority_score(property_data):
     factors = []
     ai_insights = []
     
-    # Extract data
     list_price = property_data.get('list_price', 0) or 0
     arv = property_data.get('arv', 0) or int(list_price * 1.2)
     sqft = property_data.get('sqft', 1500)
@@ -478,36 +405,31 @@ def calculate_ai_priority_score(property_data):
     days_on_market = property_data.get('days_on_market', 0)
     price_reductions = property_data.get('price_reductions', 0)
     distress_signals = property_data.get('distress_signals', [])
-    city = property_data.get('city', '')
     
     if isinstance(distress_signals, str):
         distress_signals = distress_signals.split(',') if distress_signals else []
     
-    # Estimate repairs
     current_year = datetime.now().year
     age = current_year - year_built if year_built > 1800 else 50
     
     if age > 50:
         repair_per_sqft = 65
-        ai_insights.append("🔧 Older home - budget for major systems (roof, HVAC, plumbing)")
+        ai_insights.append("🔧 Older home - budget for major systems")
     elif age > 30:
         repair_per_sqft = 45
-        ai_insights.append("🔧 Medium-age home - likely needs kitchen/bath updates")
+        ai_insights.append("🔧 Medium-age home - likely needs updates")
     elif age > 15:
         repair_per_sqft = 30
-        ai_insights.append("✅ Newer construction - mostly cosmetic updates")
+        ai_insights.append("✅ Newer construction - mostly cosmetic")
     else:
         repair_per_sqft = 20
         ai_insights.append("✅ Very new - minimal repairs expected")
     
     estimated_repairs = sqft * repair_per_sqft
-    
-    # 70% Rule
     max_offer = (arv * 0.7) - estimated_repairs
     gap = max_offer - list_price
     gap_percent = (gap / arv * 100) if arv > 0 else 0
     
-    # ROI
     total_investment = list_price + estimated_repairs + (arv * 0.13)
     net_profit = arv - total_investment
     roi = (net_profit / total_investment * 100) if total_investment > 0 else 0
@@ -516,11 +438,10 @@ def calculate_ai_priority_score(property_data):
     if gap_percent >= 15:
         score += 25
         factors.append({"name": "🎯 Excellent Price Gap (15%+)", "points": 25, "category": "profit"})
-        ai_insights.append("💰 SLAM DUNK - Priced significantly below max offer!")
+        ai_insights.append("💰 SLAM DUNK - Priced below max offer!")
     elif gap_percent >= 10:
         score += 20
         factors.append({"name": "Great Price Gap (10%+)", "points": 20, "category": "profit"})
-        ai_insights.append("💰 Strong profit margin available")
     elif gap_percent >= 5:
         score += 15
         factors.append({"name": "Good Price Gap (5%+)", "points": 15, "category": "profit"})
@@ -530,7 +451,6 @@ def calculate_ai_priority_score(property_data):
     elif gap_percent >= -10:
         score += 5
         factors.append({"name": "Negotiable", "points": 5, "category": "profit"})
-        ai_insights.append("⚠️ Needs 10%+ discount to make numbers work")
     
     if roi >= 30:
         score += 15
@@ -541,9 +461,6 @@ def calculate_ai_priority_score(property_data):
     elif roi >= 15:
         score += 8
         factors.append({"name": "Good ROI (15%+)", "points": 8, "category": "profit"})
-    elif roi >= 10:
-        score += 5
-        factors.append({"name": "Acceptable ROI (10%+)", "points": 5, "category": "profit"})
     
     # SELLER MOTIVATION (0-35)
     if 'Foreclosure' in distress_signals:
@@ -554,12 +471,10 @@ def calculate_ai_priority_score(property_data):
     if 'Pre-Foreclosure' in distress_signals:
         score += 12
         factors.append({"name": "⚠️ Pre-Foreclosure", "points": 12, "category": "motivation"})
-        ai_insights.append("Owner in financial distress - needs solution fast")
     
     if 'Probate/Estate' in distress_signals:
         score += 12
         factors.append({"name": "📜 Inherited/Estate", "points": 12, "category": "motivation"})
-        ai_insights.append("Emotional sale - heirs often want quick resolution")
     
     if 'Tax Lien' in distress_signals:
         score += 10
@@ -568,27 +483,18 @@ def calculate_ai_priority_score(property_data):
     if 'Divorce' in distress_signals:
         score += 10
         factors.append({"name": "💔 Divorce", "points": 10, "category": "motivation"})
-        ai_insights.append("Divorce situation - both parties often motivated to sell")
     
     if 'Absentee Owner' in distress_signals:
         score += 6
         factors.append({"name": "📍 Absentee Owner", "points": 6, "category": "motivation"})
-        ai_insights.append("Out-of-area owner - management burden")
     
     if 'Vacant' in distress_signals:
         score += 8
         factors.append({"name": "🏚️ Vacant Property", "points": 8, "category": "motivation"})
-        ai_insights.append("Vacant = carrying costs + liability for owner")
     
     if 'Tired Landlord' in distress_signals:
         score += 8
         factors.append({"name": "😫 Tired Landlord", "points": 8, "category": "motivation"})
-        ai_insights.append("Burnt out on property management")
-    
-    if 'Code Violations' in distress_signals:
-        score += 7
-        factors.append({"name": "⚠️ Code Violations", "points": 7, "category": "motivation"})
-        ai_insights.append("City pressure to fix or sell")
     
     if ownership_years >= 15:
         score += 5
@@ -597,21 +503,15 @@ def calculate_ai_priority_score(property_data):
     if equity_percent >= 70:
         score += 6
         factors.append({"name": "💎 High Equity (70%+)", "points": 6, "category": "motivation"})
-        ai_insights.append("High equity = more negotiation flexibility")
-    elif equity_percent >= 50:
-        score += 4
-        factors.append({"name": "Good Equity (50%+)", "points": 4, "category": "motivation"})
     
     if equity_percent >= 95:
         score += 5
         factors.append({"name": "🆓 Free & Clear", "points": 5, "category": "motivation"})
-        ai_insights.append("No lender approval needed - faster closing!")
     
     signal_count = len([s for s in distress_signals if s])
     if signal_count >= 5:
         score += 8
         factors.append({"name": "🔥 5+ Distress Signals", "points": 8, "category": "motivation"})
-        ai_insights.append("MULTIPLE MOTIVATION SIGNALS - High priority!")
     elif signal_count >= 3:
         score += 5
         factors.append({"name": "Multiple Signals", "points": 5, "category": "motivation"})
@@ -620,7 +520,6 @@ def calculate_ai_priority_score(property_data):
     if days_on_market >= 90:
         score += 8
         factors.append({"name": "📅 Stale Listing (90+ days)", "points": 8, "category": "urgency"})
-        ai_insights.append("On market 90+ days - seller getting anxious")
     elif days_on_market >= 60:
         score += 5
         factors.append({"name": "Getting Stale (60+ days)", "points": 5, "category": "urgency"})
@@ -628,17 +527,14 @@ def calculate_ai_priority_score(property_data):
     if price_reductions >= 2:
         score += 8
         factors.append({"name": "📉 Multiple Price Drops", "points": 8, "category": "urgency"})
-        ai_insights.append("Multiple price reductions = motivated seller")
     elif price_reductions >= 1:
         score += 5
         factors.append({"name": "Price Reduced", "points": 5, "category": "urgency"})
     
-    # Winter bonus
     current_month = datetime.now().month
     if current_month in [11, 12, 1, 2]:
         score += 3
         factors.append({"name": "❄️ Winter Season", "points": 3, "category": "urgency"})
-        ai_insights.append("Winter in Michigan = motivated sellers")
     
     # CONTACT (0-10)
     if property_data.get('owner_phone'):
@@ -653,7 +549,6 @@ def calculate_ai_priority_score(property_data):
         score += 2
         factors.append({"name": "📬 Mailing Address", "points": 2, "category": "contact"})
     
-    # Determine tier
     score = min(100, score)
     
     if score >= 75:
@@ -669,13 +564,12 @@ def calculate_ai_priority_score(property_data):
         tier = "MONITOR"
         action = "👀 Watch for price drops"
     
-    # AI recommendation
     if score >= 75 and roi >= 20:
         ai_recommendation = "🎯 STRONG BUY - All signals align for profit"
     elif score >= 55 and roi >= 15:
         ai_recommendation = "✅ GOOD OPPORTUNITY - Worth pursuing"
     elif score >= 35:
-        ai_recommendation = "⚠️ NEEDS WORK - Negotiate hard or wait for price drop"
+        ai_recommendation = "⚠️ NEEDS WORK - Negotiate hard or wait"
     else:
         ai_recommendation = "❌ PASS - Numbers don't work at current price"
     
@@ -697,7 +591,7 @@ def calculate_ai_priority_score(property_data):
     }
 
 def predict_arv(property_data, city):
-    """AI-powered ARV prediction based on market data and comps"""
+    """AI-powered ARV prediction"""
     city_data = MICHIGAN_CITIES.get(city, {'median_price': 150000, 'appreciation': 8.0})
     
     sqft = property_data.get('sqft', 1500)
@@ -706,18 +600,12 @@ def predict_arv(property_data, city):
     year_built = property_data.get('year_built', 1970)
     list_price = property_data.get('list_price', city_data['median_price'])
     
-    # Base ARV calculation
-    price_per_sqft = city_data['median_price'] / 1500  # Average sqft
+    price_per_sqft = city_data['median_price'] / 1500
     base_arv = sqft * price_per_sqft
     
-    # Adjustments
-    # Bedroom adjustment (+/- $10k per bedroom from 3)
     bed_adjustment = (beds - 3) * 10000
-    
-    # Bathroom adjustment (+$7.5k per bath above 1.5)
     bath_adjustment = max(0, (baths - 1.5)) * 7500
     
-    # Age adjustment (newer = higher value)
     current_year = datetime.now().year
     age = current_year - year_built
     if age <= 10:
@@ -729,47 +617,30 @@ def predict_arv(property_data, city):
     else:
         age_multiplier = 0.92
     
-    # Market appreciation factor
     appreciation_factor = 1 + (city_data['appreciation'] / 100)
-    
-    # Calculate predicted ARV
     predicted_arv = (base_arv + bed_adjustment + bath_adjustment) * age_multiplier * appreciation_factor
     
-    # Confidence based on data quality
     confidence = random.randint(75, 95)
-    
-    # Generate comp range
-    low_arv = int(predicted_arv * 0.9)
-    high_arv = int(predicted_arv * 1.1)
     
     return {
         'predicted_arv': int(predicted_arv),
-        'low_estimate': low_arv,
-        'high_estimate': high_arv,
+        'low_estimate': int(predicted_arv * 0.9),
+        'high_estimate': int(predicted_arv * 1.1),
         'confidence': confidence,
         'price_per_sqft': int(predicted_arv / sqft),
-        'appreciation_rate': city_data['appreciation'],
-        'factors': {
-            'base_value': int(base_arv),
-            'bed_adjustment': bed_adjustment,
-            'bath_adjustment': bath_adjustment,
-            'age_multiplier': age_multiplier,
-            'market_factor': appreciation_factor
-        }
+        'appreciation_rate': city_data['appreciation']
     }
 
 def analyze_neighborhood(city):
-    """AI neighborhood analysis with scoring"""
+    """AI neighborhood analysis"""
     city_data = MICHIGAN_CITIES.get(city, {'median_price': 150000, 'appreciation': 8.0})
     
-    # Generate neighborhood metrics
     school_rating = random.randint(4, 10)
-    crime_score = random.randint(3, 9)  # Higher is safer
+    crime_score = random.randint(3, 9)
     walkability = random.randint(20, 85)
     job_growth = round(random.uniform(1.5, 8.5), 1)
     population_trend = random.choice(['Growing', 'Stable', 'Declining'])
     
-    # Calculate overall score
     score = int(
         (school_rating * 2) +
         (crime_score * 2) +
@@ -780,7 +651,6 @@ def analyze_neighborhood(city):
     )
     score = min(100, score)
     
-    # Investment grade
     if score >= 75:
         grade = 'A'
         investment_outlook = '🌟 Excellent investment area'
@@ -919,16 +789,16 @@ def mark_alert_read(alert_id):
     conn.close()
 
 def add_note(prop_id, content, author="User"):
-    """Add a note for a property"""
+    """Add a note"""
     conn = sqlite3.connect(get_db_path())
     c = conn.cursor()
-    c.execute('''INSERT INTO notes (property_id, content, author)
-                 VALUES (?, ?, ?)''', (prop_id, content, author))
+    c.execute('''INSERT INTO notes (property_id, content, author) VALUES (?, ?, ?)''', 
+              (prop_id, content, author))
     conn.commit()
     conn.close()
 
 def get_notes(prop_id):
-    """Get all notes for a property"""
+    """Get notes for property"""
     conn = sqlite3.connect(get_db_path())
     df = pd.read_sql_query(
         "SELECT * FROM notes WHERE property_id = ? ORDER BY created_at DESC", 
@@ -948,7 +818,7 @@ def add_followup(prop_id, followup_type, date, time, assignee, notes=""):
     conn.close()
 
 def get_followups(prop_id):
-    """Get all follow-ups for a property"""
+    """Get follow-ups for property"""
     conn = sqlite3.connect(get_db_path())
     df = pd.read_sql_query(
         "SELECT * FROM followups WHERE property_id = ? ORDER BY date DESC", 
@@ -958,22 +828,20 @@ def get_followups(prop_id):
     return df
 
 # ============================================================================
-# ANALYTICS & CHARTS
+# ANALYTICS
 # ============================================================================
 
 def create_analytics_dashboard(properties_df):
-    """Create comprehensive analytics dashboard"""
-    
+    """Create analytics dashboard"""
     if properties_df.empty:
         st.warning("No data available for analytics.")
         return
     
-    # Row 1: Key Metrics
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         hot_count = len(properties_df[properties_df['priority_tier'] == 'HOT'])
-        st.metric("🔥 Hot Leads", hot_count, delta=f"+{random.randint(1,5)} this week")
+        st.metric("🔥 Hot Leads", hot_count)
     
     with col2:
         total_value = properties_df['list_price'].sum()
@@ -988,12 +856,11 @@ def create_analytics_dashboard(properties_df):
         st.metric("✅ Closed Deals", closed_count)
     
     with col5:
-        avg_roi = 22.5  # Simulated
+        avg_roi = 22.5
         st.metric("📈 Avg ROI", f"{avg_roi}%")
     
     st.markdown("---")
     
-    # Row 2: Charts
     col1, col2 = st.columns(2)
     
     with col1:
@@ -1023,7 +890,6 @@ def create_analytics_dashboard(properties_df):
     
     st.markdown("---")
     
-    # Row 3: City Analysis
     col1, col2 = st.columns(2)
     
     with col1:
@@ -1036,7 +902,7 @@ def create_analytics_dashboard(properties_df):
             color=city_counts.values,
             color_continuous_scale='Blues'
         )
-        fig.update_layout(showlegend=False, height=400, xaxis_title="Properties", yaxis_title="City")
+        fig.update_layout(showlegend=False, height=400)
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
@@ -1049,78 +915,11 @@ def create_analytics_dashboard(properties_df):
             color=city_prices.values,
             color_continuous_scale='Greens'
         )
-        fig.update_layout(showlegend=False, height=400, xaxis_title="Avg Price ($)", yaxis_title="City")
+        fig.update_layout(showlegend=False, height=400)
         st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Row 4: Score Distribution & Trends
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📈 Priority Score Distribution")
-        fig = px.histogram(
-            properties_df, 
-            x='priority_score', 
-            nbins=20,
-            color_discrete_sequence=['#6366f1']
-        )
-        fig.update_layout(height=300, xaxis_title="Priority Score", yaxis_title="Count")
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("🏠 Property Type Distribution")
-        type_counts = properties_df['property_type'].value_counts()
-        fig = px.pie(
-            values=type_counts.values, 
-            names=type_counts.index,
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        fig.update_layout(height=300)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Row 5: Price vs Score Scatter
-    st.subheader("💰 Price vs Priority Score Analysis")
-    fig = px.scatter(
-        properties_df,
-        x='list_price',
-        y='priority_score',
-        color='priority_tier',
-        size='sqft',
-        hover_data=['address', 'city', 'beds', 'baths'],
-        color_discrete_map={'HOT': '#ef4444', 'WARM': '#f59e0b', 'NURTURE': '#3b82f6', 'MONITOR': '#6b7280'}
-    )
-    fig.update_layout(height=400, xaxis_title="List Price ($)", yaxis_title="Priority Score")
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Row 6: Market Insights
-    st.markdown("---")
-    st.subheader("🎯 Market Insights")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("**Top Opportunity Cities:**")
-        for city in ['Flint', 'Saginaw', 'Detroit', 'Pontiac', 'Southfield']:
-            city_data = MICHIGAN_CITIES.get(city, {})
-            st.write(f"• {city}: {city_data.get('appreciation', 0)}% appreciation")
-    
-    with col2:
-        st.markdown("**Best ROI Property Types:**")
-        st.write("• Single Family: 25% avg ROI")
-        st.write("• Multi-Family: 22% avg ROI")
-        st.write("• Duplex: 20% avg ROI")
-    
-    with col3:
-        st.markdown("**Active Alerts:**")
-        alerts_df = get_alerts(unread_only=True)
-        st.write(f"• {len(alerts_df)} unread alerts")
-        st.write(f"• {len(properties_df[properties_df['priority_tier'] == 'HOT'])} hot leads waiting")
 
 # ============================================================================
-# MAP GENERATION
+# MAP
 # ============================================================================
 
 def create_property_map(properties_df, selected_property=None):
@@ -1154,14 +953,11 @@ def create_property_map(properties_df, selected_property=None):
                 color = tier_colors.get(tier, 'gray')
                 
                 popup_html = f"""
-                <div style="width: 250px; font-family: Arial, sans-serif;">
-                    <h4 style="margin: 0; color: #6366f1;">{prop.get('address', 'N/A')}</h4>
-                    <p style="margin: 5px 0; color: #666;">{prop.get('city', '')}, MI</p>
-                    <hr style="margin: 5px 0; border-color: #eee;">
-                    <p><b>💰 Price:</b> ${prop.get('list_price', 0):,}</p>
-                    <p><b>🎯 Score:</b> {prop.get('priority_score', 0)} ({tier})</p>
-                    <p><b>🏠 Beds/Baths:</b> {prop.get('beds', 0)}/{prop.get('baths', 0)}</p>
-                    <p><b>📐 Sqft:</b> {prop.get('sqft', 0):,}</p>
+                <div style="width: 200px;">
+                    <h4>{prop.get('address', 'N/A')}</h4>
+                    <p>{prop.get('city', '')}, MI</p>
+                    <p>💰 ${prop.get('list_price', 0):,}</p>
+                    <p>🎯 Score: {prop.get('priority_score', 0)}</p>
                 </div>
                 """
                 
@@ -1172,7 +968,7 @@ def create_property_map(properties_df, selected_property=None):
                     fill=True,
                     fillColor=color,
                     fillOpacity=0.7,
-                    popup=folium.Popup(popup_html, max_width=300)
+                    popup=folium.Popup(popup_html, max_width=250)
                 ).add_to(m)
     
     return m
@@ -1210,7 +1006,7 @@ def generate_cma_pdf(property_data, priority_data):
     story.append(Paragraph("Comparative Market Analysis", styles['Heading2']))
     story.append(Spacer(1, 12))
     
-    address = f"{property_data.get('address', 'N/A')}, {property_data.get('city', '')}, MI {property_data.get('zip', '')}"
+    address = f"{property_data.get('address', 'N/A')}, {property_data.get('city', '')}, MI"
     story.append(Paragraph(f"<b>{address}</b>", styles['Heading1']))
     story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y')}", styles['Normal']))
     story.append(Spacer(1, 20))
@@ -1221,26 +1017,6 @@ def generate_cma_pdf(property_data, priority_data):
     story.append(Paragraph(priority_data.get('ai_recommendation', ''), styles['Normal']))
     story.append(Spacer(1, 12))
     
-    story.append(Paragraph("Property Summary", heading_style))
-    prop_data = [
-        ['Property Type', property_data.get('property_type', 'N/A'), 'Year Built', str(property_data.get('year_built', 'N/A'))],
-        ['Bedrooms', str(property_data.get('beds', 'N/A')), 'Bathrooms', str(property_data.get('baths', 'N/A'))],
-        ['Square Feet', f"{property_data.get('sqft', 0):,}", 'Lot Size', f"{property_data.get('lot_size', 0)} acres"],
-    ]
-    prop_table = Table(prop_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch])
-    prop_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8f9fa')),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 1, colors.white),
-    ]))
-    story.append(prop_table)
-    story.append(Spacer(1, 12))
-    
     story.append(Paragraph("Investment Analysis", heading_style))
     financials = priority_data.get('financials', {})
     fin_data = [
@@ -1249,27 +1025,16 @@ def generate_cma_pdf(property_data, priority_data):
         ['Max Offer (70% Rule)', f"${financials.get('max_offer', 0):,.0f}"],
         ['Estimated Repairs', f"${financials.get('estimated_repairs', 0):,.0f}"],
         ['Estimated ROI', f"{financials.get('roi', 0):.1f}%"],
-        ['Net Profit Potential', f"${financials.get('net_profit', 0):,.0f}"],
     ]
     fin_table = Table(fin_data, colWidths=[3*inch, 2*inch])
     fin_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e8f5e9')),
         ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 10),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
         ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 1, colors.white),
     ]))
     story.append(fin_table)
-    story.append(Spacer(1, 12))
-    
-    if priority_data.get('ai_insights'):
-        story.append(Paragraph("AI Insights", heading_style))
-        for insight in priority_data['ai_insights']:
-            story.append(Paragraph(f"• {insight}", styles['Normal']))
     
     story.append(Spacer(1, 30))
     story.append(Paragraph("Generated by FlipFinder Pro", 
@@ -1284,16 +1049,13 @@ def generate_cma_pdf(property_data, priority_data):
 # ============================================================================
 
 def main():
-    # Initialize
     init_database()
     
-    # Load mock data if empty
     if 'mock_loaded' not in st.session_state:
         if load_mock_data():
             st.session_state.mock_loaded = True
-            st.toast("✅ Demo data loaded successfully!", icon="🎉")
+            st.toast("✅ Demo data loaded!", icon="🎉")
     
-    # Session state
     if 'api_key' not in st.session_state:
         st.session_state.api_key = ""
     if 'selected_property' not in st.session_state:
@@ -1309,7 +1071,6 @@ def main():
         st.caption("Michigan Fix & Flip Platform")
         st.markdown("---")
         
-        # Data source toggle
         st.session_state.use_mock_data = st.toggle("🎭 Use Demo Data", value=True)
         
         if not st.session_state.use_mock_data:
@@ -1320,11 +1081,9 @@ def main():
         
         st.markdown("---")
         
-        # Alerts badge
         alerts_df = get_alerts(unread_only=True)
         alert_count = len(alerts_df)
         
-        # Navigation
         page = st.radio("Navigation", [
             "🏠 Dashboard",
             "🔍 Property Search",
@@ -1337,29 +1096,22 @@ def main():
             "⚙️ Settings"
         ])
     
-    # Main content
     st.title("🏠 FlipFinder Pro")
     st.caption("AI-Powered Michigan Fix & Flip Investment Platform")
     
-    # =========================================================================
-    # PROPERTY DETAIL VIEW (Shows at top when property selected)
-    # =========================================================================
+    # Property Detail View
     if st.session_state.selected_property:
         prop_data = get_property_by_id(st.session_state.selected_property)
         
         if prop_data:
-            # Close button
             if st.button("❌ Close Details & Go Back", type="secondary"):
                 st.session_state.selected_property = None
                 st.rerun()
             
             st.markdown("---")
-            
-            # Header
             st.header(f"📍 {prop_data['address']}")
             st.caption(f"{prop_data['city']}, MI {prop_data['zip']}")
             
-            # Priority score
             priority = calculate_ai_priority_score(prop_data)
             tier_colors = {'HOT': '🔴', 'WARM': '🟠', 'NURTURE': '🔵', 'MONITOR': '⚪'}
             
@@ -1373,11 +1125,7 @@ def main():
             
             st.info(priority['ai_recommendation'])
             
-            # Tabs for details
-            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-                "📊 Overview", "💰 Deal Analysis", "🤖 AI Insights", 
-                "👤 Owner", "📞 Follow-ups", "📝 Notes"
-            ])
+            tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "💰 Deal Analysis", "👤 Owner", "📝 Notes"])
             
             with tab1:
                 col1, col2 = st.columns(2)
@@ -1388,29 +1136,16 @@ def main():
                     st.write(f"• Baths: {prop_data.get('baths', 'N/A')}")
                     st.write(f"• Sqft: {prop_data.get('sqft', 0):,}")
                     st.write(f"• Year: {prop_data.get('year_built', 'N/A')}")
-                    st.write(f"• Lot: {prop_data.get('lot_size', 0)} acres")
                 
                 with col2:
                     st.markdown("**Financial Summary**")
                     st.write(f"• List Price: ${prop_data.get('list_price', 0):,}")
-                    st.write(f"• Est. Value: ${prop_data.get('estimated_value', 0):,}")
                     st.write(f"• ARV: ${prop_data.get('arv', 0):,}")
                     st.write(f"• Equity: {prop_data.get('equity_percent', 0)}%")
                     st.write(f"• Days on Market: {prop_data.get('days_on_market', 0)}")
-                
-                st.markdown("**Distress Signals**")
-                signals = prop_data.get('distress_signals', '')
-                if signals:
-                    for signal in signals.split(','):
-                        if signal.strip():
-                            st.write(f"⚠️ {signal.strip()}")
-                else:
-                    st.write("No distress signals detected")
             
             with tab2:
-                st.markdown("### 70% Rule Analysis")
                 fin = priority.get('financials', {})
-                
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric("Max Offer", f"${fin.get('max_offer', 0):,.0f}")
@@ -1420,82 +1155,27 @@ def main():
                     st.metric("ROI", f"{fin.get('roi', 0):.1f}%")
                 with col4:
                     st.metric("Net Profit", f"${fin.get('net_profit', 0):,.0f}")
-                
-                st.markdown("### Scoring Breakdown")
-                for factor in priority.get('factors', []):
-                    st.write(f"✓ {factor['name']}: +{factor['points']} pts")
             
             with tab3:
-                st.markdown("### AI Insights")
-                for insight in priority.get('ai_insights', []):
-                    st.info(insight)
-                
-                st.markdown("### Neighborhood Analysis")
-                neighborhood = analyze_neighborhood(prop_data.get('city', 'Detroit'))
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Neighborhood Score", f"{neighborhood['score']}/100")
-                    st.metric("Investment Grade", neighborhood['grade'])
-                with col2:
-                    st.write(neighborhood['investment_outlook'])
-                
-                st.markdown("### AI ARV Prediction")
-                arv_pred = predict_arv(prop_data, prop_data.get('city', 'Detroit'))
-                st.metric("Predicted ARV", f"${arv_pred['predicted_arv']:,}")
-                st.caption(f"Range: ${arv_pred['low_estimate']:,} - ${arv_pred['high_estimate']:,} ({arv_pred['confidence']}% confidence)")
-            
-            with tab4:
-                st.markdown("### Owner Information")
                 st.write(f"**Name:** {prop_data.get('owner_name', 'N/A')}")
                 st.write(f"**Phone:** {prop_data.get('owner_phone', 'N/A') or 'Not available'}")
                 st.write(f"**Email:** {prop_data.get('owner_email', 'N/A') or 'Not available'}")
-                st.write(f"**Mailing:** {prop_data.get('owner_mailing', 'N/A')}")
-                st.write(f"**Ownership:** {prop_data.get('ownership_years', 0)} years")
             
-            with tab5:
-                st.markdown("### Schedule Follow-up")
-                col1, col2 = st.columns(2)
-                with col1:
-                    fu_type = st.selectbox("Type", ["📞 Call", "✉️ Email", "💬 Text", "📬 Mail", "🚗 Door Knock"])
-                    fu_date = st.date_input("Date")
-                with col2:
-                    fu_time = st.time_input("Time")
-                    fu_assignee = st.text_input("Assign to")
-                
-                if st.button("➕ Add Follow-up"):
-                    add_followup(st.session_state.selected_property, fu_type, str(fu_date), str(fu_time), fu_assignee)
-                    st.success("✅ Follow-up scheduled!")
-                
-                st.markdown("### Scheduled Follow-ups")
-                followups = get_followups(st.session_state.selected_property)
-                if not followups.empty:
-                    for _, fu in followups.iterrows():
-                        st.write(f"• {fu['type']} - {fu['date']} {fu['time']}")
-                else:
-                    st.info("No follow-ups scheduled")
-            
-            with tab6:
-                st.markdown("### Add Note")
-                new_note = st.text_area("Note content")
+            with tab4:
+                new_note = st.text_area("Add Note")
                 if st.button("➕ Add Note"):
                     if new_note:
                         add_note(st.session_state.selected_property, new_note)
                         st.success("✅ Note added!")
                         st.rerun()
                 
-                st.markdown("### Notes History")
                 notes = get_notes(st.session_state.selected_property)
                 if not notes.empty:
                     for _, note in notes.iterrows():
-                        with st.container(border=True):
-                            st.caption(f"{note['author']} - {note['created_at']}")
-                            st.write(note['content'])
-                else:
-                    st.info("No notes yet")
+                        st.caption(f"{note['created_at']}")
+                        st.write(note['content'])
+                        st.markdown("---")
             
-            # CMA Download
-            st.markdown("---")
             if st.button("📄 Generate CMA Report", type="primary"):
                 pdf_buffer = generate_cma_pdf(prop_data, priority)
                 st.download_button(
@@ -1505,21 +1185,14 @@ def main():
                     mime="application/pdf"
                 )
             
-            st.markdown("---")
-            st.markdown("---")
-        
-        # Stop here - don't show the regular pages when viewing details
-        st.stop()
+            st.stop()
     
-    # =========================================================================
-    # DASHBOARD
-    # =========================================================================
+    # Dashboard
     if page == "🏠 Dashboard":
         st.header("Dashboard")
         
         properties_df = get_all_properties()
         
-        # Key metrics
         col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
@@ -1543,8 +1216,6 @@ def main():
             st.metric("📈 Avg Score", f"{avg_score:.0f}")
         
         st.markdown("---")
-        
-        # Hot leads
         st.subheader("🔥 Hot Leads - Contact Today")
         
         if not properties_df.empty:
@@ -1557,88 +1228,47 @@ def main():
                         with st.container(border=True):
                             st.markdown(f"**{prop['address']}**")
                             st.caption(f"{prop['city']}, MI")
-                            
-                            col_a, col_b = st.columns(2)
-                            with col_a:
-                                st.markdown(f"💰 ${prop['list_price']:,}")
-                            with col_b:
-                                st.markdown(f"🎯 Score: **{prop['priority_score']}**")
-                            
-                            signals = prop.get('distress_signals', '')
-                            if signals:
-                                st.caption(f"⚠️ {signals[:30]}...")
+                            st.markdown(f"💰 ${prop['list_price']:,} | 🎯 Score: **{prop['priority_score']}**")
                             
                             if st.button("View Details", key=f"hot_{prop['id']}"):
                                 st.session_state.selected_property = prop['id']
                                 st.rerun()
             else:
-                st.info("No hot leads yet. Search for properties to find opportunities!")
-        
-        # Recent alerts
-        st.markdown("---")
-        st.subheader("🔔 Recent Alerts")
-        
-        alerts_df = get_alerts()
-        if not alerts_df.empty:
-            for _, alert in alerts_df.head(3).iterrows():
-                priority_icon = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(alert['priority'], '⚪')
-                with st.container(border=True):
-                    st.markdown(f"{priority_icon} **{alert['title']}**")
-                    st.caption(alert['message'])
-        else:
-            st.info("No alerts")
+                st.info("No hot leads yet.")
     
-    # =========================================================================
-    # PROPERTY SEARCH
-    # =========================================================================
+    # Property Search
     elif page == "🔍 Property Search":
         st.header("Property Search")
         
-        # Show API search option if not using mock data
         if not st.session_state.use_mock_data:
-            st.info("🔑 **API Mode Active** - Search real properties from RealEstateAPI.com")
+            st.info("🔑 **API Mode Active** - Search real properties")
             
             if not st.session_state.api_key:
-                st.warning("⚠️ Please enter your API key in the sidebar first!")
+                st.warning("⚠️ Enter your API key in the sidebar")
             else:
-                with st.expander("🔍 API Search Filters", expanded=True):
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        api_city = st.selectbox("City", list(MICHIGAN_CITIES.keys()), key="api_city")
-                        api_beds = st.selectbox("Min Beds", [1, 2, 3, 4, 5], index=1, key="api_beds")
-                    
-                    with col2:
-                        api_distress = st.multiselect("Distress Filters", 
-                            ["Pre-Foreclosure", "Foreclosure", "Vacant", "Absentee Owner"],
-                            key="api_distress")
-                        st.caption("💡 Price filters temporarily disabled while we verify API params")
+                api_city = st.selectbox("City", list(MICHIGAN_CITIES.keys()), key="api_city")
                 
-                if st.button("🔍 Search RealEstateAPI", type="primary", use_container_width=True):
-                    with st.spinner("Searching RealEstateAPI.com..."):
+                if st.button("🔍 Search RealEstateAPI", type="primary"):
+                    with st.spinner("Searching..."):
                         api = RealEstateAPI(st.session_state.api_key)
                         
-                        # Build search params
-                        params = api.build_michigan_search(
-                            city=api_city,
-                            min_beds=api_beds,
-                            distress_filters=api_distress if api_distress else None
-                        )
+                        # Minimal params
+                        params = {
+                            "city": api_city,
+                            "state": "MI",
+                            "size": 25
+                        }
                         
-                        # Show params for debugging
-                        with st.expander("🔧 Debug: API Request Parameters"):
+                        with st.expander("🔧 Debug: Request"):
                             st.json(params)
                         
                         results = api.property_search(params)
                         
-                        # Show raw response for debugging
-                        with st.expander("🔧 Debug: API Response"):
+                        with st.expander("🔧 Debug: Response"):
                             st.json(results)
                         
-                        # Check for results in different possible structures
                         data = None
                         if results:
-                            # Try different response structures
                             if isinstance(results, list):
                                 data = results
                             elif results.get('data'):
@@ -1653,230 +1283,92 @@ def main():
                             st.session_state.api_results = data
                         elif results and results.get('error'):
                             st.error(f"API Error: {results.get('error')}")
-                            st.info("💡 **Tip:** Check that your API key is correct and you have an active subscription.")
                         else:
-                            st.warning("No properties found. Try adjusting your filters or check the debug info above.")
-                
-                # Display API results
-                if 'api_results' in st.session_state and st.session_state.api_results:
-                    st.markdown("---")
-                    st.subheader(f"API Results ({len(st.session_state.api_results)} properties)")
-                    
-                    for idx, prop in enumerate(st.session_state.api_results[:20]):  # Limit to 20
-                        with st.container(border=True):
-                            col1, col2, col3 = st.columns([2, 1, 1])
-                            
-                            # Extract address
-                            address_data = prop.get('address', {})
-                            if isinstance(address_data, dict):
-                                full_address = address_data.get('streetAddress', 'N/A')
-                                city_name = address_data.get('city', 'N/A')
-                                zip_code = address_data.get('zip', '')
-                            else:
-                                full_address = str(address_data)
-                                city_name = api_city
-                                zip_code = ''
-                            
-                            beds = prop.get('bedrooms', 0) or prop.get('beds', 0) or 3
-                            baths = prop.get('bathrooms', 0) or prop.get('baths', 0) or 2
-                            sqft = prop.get('squareFeet', 0) or prop.get('sqft', 0) or 1500
-                            est_value = prop.get('estimatedValue', 0) or prop.get('list_price', 0) or 100000
-                            
-                            with col1:
-                                st.markdown(f"**{full_address}**")
-                                st.caption(f"{city_name}, MI {zip_code}")
-                                st.write(f"🛏️ {beds} | 🚿 {baths} | 📐 {sqft:,} sqft")
-                            
-                            with col2:
-                                st.metric("Est. Value", f"${est_value:,}")
-                            
-                            with col3:
-                                if st.button("💾 Save Lead", key=f"api_save_{idx}"):
-                                    # Prepare property for saving
-                                    save_data = {
-                                        'id': prop.get('id', f"api_{idx}_{datetime.now().strftime('%H%M%S')}"),
-                                        'address': full_address,
-                                        'city': city_name,
-                                        'state': 'MI',
-                                        'zip': zip_code,
-                                        'beds': beds,
-                                        'baths': baths,
-                                        'sqft': sqft,
-                                        'year_built': prop.get('yearBuilt', 1980),
-                                        'list_price': est_value,
-                                        'estimated_value': est_value,
-                                        'arv': int(est_value * 1.2),
-                                        'equity_percent': prop.get('equityPercent', 50),
-                                        'lat': prop.get('latitude', 0) or prop.get('lat', 0),
-                                        'lng': prop.get('longitude', 0) or prop.get('lng', 0),
-                                        'distress_signals': [],
-                                        'owner_name': prop.get('owner', {}).get('name', '') if isinstance(prop.get('owner'), dict) else '',
-                                        'stage': 'New Lead'
-                                    }
-                                    
-                                    # Add distress signals
-                                    if prop.get('preForeclosure'):
-                                        save_data['distress_signals'].append('Pre-Foreclosure')
-                                    if prop.get('foreclosure'):
-                                        save_data['distress_signals'].append('Foreclosure')
-                                    if prop.get('vacant'):
-                                        save_data['distress_signals'].append('Vacant')
-                                    if prop.get('absenteeOwner'):
-                                        save_data['distress_signals'].append('Absentee Owner')
-                                    
-                                    priority = calculate_ai_priority_score(save_data)
-                                    save_property(save_data, priority)
-                                    st.success("✅ Saved!")
-                                    st.rerun()
+                            st.warning("No properties found.")
                 
                 st.markdown("---")
         
-        # Always show saved properties filter section
-        st.subheader("📋 Your Saved Properties")
+        st.subheader("📋 Saved Properties")
         
-        with st.expander("🔍 Filter Saved Properties", expanded=True):
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                city_filter = st.selectbox("City", ["All Cities"] + list(MICHIGAN_CITIES.keys()))
-                min_price = st.number_input("Min Price", min_value=0, value=0, step=10000)
-            
-            with col2:
-                type_filter = st.selectbox("Property Type", ["All Types"] + PROPERTY_TYPES)
-                max_price = st.number_input("Max Price", min_value=0, value=500000, step=10000)
-            
-            with col3:
-                min_beds = st.selectbox("Min Beds", [None, 1, 2, 3, 4, 5])
-                min_score = st.slider("Min Priority Score", 0, 100, 0)
-            
-            with col4:
-                tier_filter = st.selectbox("Priority Tier", ["All", "HOT", "WARM", "NURTURE", "MONITOR"])
-                distress_filter = st.multiselect("Distress Signals", DISTRESS_SIGNALS)
-        
-        # Get and filter properties
         properties_df = get_all_properties()
         
         if not properties_df.empty:
-            filtered_df = properties_df.copy()
+            city_filter = st.selectbox("Filter by City", ["All Cities"] + list(properties_df['city'].unique()))
             
+            filtered_df = properties_df.copy()
             if city_filter != "All Cities":
                 filtered_df = filtered_df[filtered_df['city'] == city_filter]
-            if type_filter != "All Types":
-                filtered_df = filtered_df[filtered_df['property_type'] == type_filter]
-            if min_price > 0:
-                filtered_df = filtered_df[filtered_df['list_price'] >= min_price]
-            if max_price > 0:
-                filtered_df = filtered_df[filtered_df['list_price'] <= max_price]
-            if min_beds:
-                filtered_df = filtered_df[filtered_df['beds'] >= min_beds]
-            if min_score > 0:
-                filtered_df = filtered_df[filtered_df['priority_score'] >= min_score]
-            if tier_filter != "All":
-                filtered_df = filtered_df[filtered_df['priority_tier'] == tier_filter]
             
-            st.markdown(f"**{len(filtered_df)} properties found**")
-            st.markdown("---")
+            st.markdown(f"**{len(filtered_df)} properties**")
             
-            # Display properties
-            for _, prop in filtered_df.iterrows():
+            for _, prop in filtered_df.head(20).iterrows():
                 with st.container(border=True):
-                    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+                    col1, col2, col3 = st.columns([2, 1, 1])
                     
                     with col1:
-                        st.markdown(f"### {prop['address']}")
-                        st.caption(f"{prop['city']}, MI {prop['zip']}")
-                        st.markdown(f"🛏️ {prop['beds']} | 🚿 {prop['baths']} | 📐 {prop['sqft']:,} sqft | 📅 {prop['year_built']}")
-                        
-                        signals = prop.get('distress_signals', '')
-                        if signals:
-                            st.caption(f"⚠️ {signals}")
+                        st.markdown(f"**{prop['address']}**")
+                        st.caption(f"{prop['city']}, MI | {prop['beds']}bd/{prop['baths']}ba | {prop['sqft']:,} sqft")
                     
                     with col2:
                         st.metric("Price", f"${prop['list_price']:,}")
                     
                     with col3:
-                        st.metric("Score", prop['priority_score'])
                         tier_colors = {'HOT': '🔴', 'WARM': '🟠', 'NURTURE': '🔵', 'MONITOR': '⚪'}
-                        st.caption(f"{tier_colors.get(prop['priority_tier'], '')} {prop['priority_tier']}")
-                    
-                    with col4:
-                        if st.button("📄 Details", key=f"detail_{prop['id']}"):
+                        st.markdown(f"{tier_colors.get(prop['priority_tier'], '')} {prop['priority_score']}")
+                        if st.button("View", key=f"view_{prop['id']}"):
                             st.session_state.selected_property = prop['id']
                             st.rerun()
-        else:
-            st.info("No properties found. Check settings or add properties.")
     
-    # =========================================================================
-    # PRIORITY QUEUE
-    # =========================================================================
+    # Priority Queue
     elif page == "🎯 Priority Queue":
         st.header("Contact Priority Queue")
-        st.caption("Properties sorted by AI priority score - contact hot leads first!")
         
         properties_df = get_all_properties()
         
         if not properties_df.empty:
-            # Tier tabs
             tab1, tab2, tab3, tab4 = st.tabs(["🔥 HOT", "🌡️ WARM", "💧 NURTURE", "👀 MONITOR"])
             
             with tab1:
                 hot_df = properties_df[properties_df['priority_tier'] == 'HOT']
-                st.markdown(f"**{len(hot_df)} hot leads** - Call these TODAY!")
+                st.markdown(f"**{len(hot_df)} hot leads** - Call TODAY!")
                 for _, prop in hot_df.iterrows():
                     with st.container(border=True):
-                        col1, col2, col3 = st.columns([2, 1, 1])
+                        col1, col2 = st.columns([3, 1])
                         with col1:
                             st.markdown(f"**{prop['address']}** - {prop['city']}")
                             st.caption(f"💰 ${prop['list_price']:,} | Score: {prop['priority_score']}")
-                        with col2:
                             if prop['owner_phone']:
                                 st.markdown(f"📞 {prop['owner_phone']}")
-                        with col3:
-                            if st.button("View", key=f"q_hot_{prop['id']}"):
+                        with col2:
+                            if st.button("View", key=f"q_{prop['id']}"):
                                 st.session_state.selected_property = prop['id']
                                 st.rerun()
             
             with tab2:
                 warm_df = properties_df[properties_df['priority_tier'] == 'WARM']
-                st.markdown(f"**{len(warm_df)} warm leads** - Contact this week")
-                for _, prop in warm_df.iterrows():
-                    with st.container(border=True):
-                        col1, col2, col3 = st.columns([2, 1, 1])
-                        with col1:
-                            st.markdown(f"**{prop['address']}** - {prop['city']}")
-                            st.caption(f"💰 ${prop['list_price']:,} | Score: {prop['priority_score']}")
-                        with col2:
-                            if prop['owner_phone']:
-                                st.markdown(f"📞 {prop['owner_phone']}")
-                        with col3:
-                            if st.button("View", key=f"q_warm_{prop['id']}"):
-                                st.session_state.selected_property = prop['id']
-                                st.rerun()
+                st.markdown(f"**{len(warm_df)} warm leads**")
+                for _, prop in warm_df.head(10).iterrows():
+                    st.write(f"• {prop['address']} - {prop['city']} - Score: {prop['priority_score']}")
             
             with tab3:
                 nurture_df = properties_df[properties_df['priority_tier'] == 'NURTURE']
-                st.markdown(f"**{len(nurture_df)} nurture leads** - Add to drip campaign")
+                st.markdown(f"**{len(nurture_df)} nurture leads**")
                 for _, prop in nurture_df.head(10).iterrows():
                     st.write(f"• {prop['address']} - {prop['city']} - Score: {prop['priority_score']}")
             
             with tab4:
                 monitor_df = properties_df[properties_df['priority_tier'] == 'MONITOR']
-                st.markdown(f"**{len(monitor_df)} monitor leads** - Watch for price drops")
+                st.markdown(f"**{len(monitor_df)} monitor leads**")
                 for _, prop in monitor_df.head(10).iterrows():
                     st.write(f"• {prop['address']} - {prop['city']} - Score: {prop['priority_score']}")
-        else:
-            st.info("No properties in queue")
     
-    # =========================================================================
-    # PIPELINE
-    # =========================================================================
+    # Pipeline
     elif page == "📋 Pipeline":
         st.header("Deal Pipeline")
         
         properties_df = get_all_properties()
         
         if not properties_df.empty:
-            # Pipeline visualization
             st.subheader("Pipeline Overview")
             stage_counts = properties_df['stage'].value_counts()
             
@@ -1888,9 +1380,6 @@ def main():
             
             st.markdown("---")
             
-            # Kanban-style view
-            st.subheader("Pipeline Board")
-            
             selected_stage = st.selectbox("Filter by Stage", ["All"] + PIPELINE_STAGES)
             
             if selected_stage != "All":
@@ -1898,129 +1387,74 @@ def main():
             else:
                 filtered = properties_df
             
-            for _, prop in filtered.iterrows():
+            for _, prop in filtered.head(15).iterrows():
                 with st.container(border=True):
-                    col1, col2, col3 = st.columns([2, 1, 1])
-                    
+                    col1, col2 = st.columns([2, 1])
                     with col1:
-                        st.markdown(f"**{prop['address']}**")
-                        st.caption(f"{prop['city']} | ${prop['list_price']:,}")
-                    
+                        st.markdown(f"**{prop['address']}** - {prop['city']}")
+                        st.caption(f"${prop['list_price']:,} | Current: {prop['stage']}")
                     with col2:
-                        st.caption(f"Current: {prop['stage']}")
                         new_stage = st.selectbox(
                             "Move to",
                             PIPELINE_STAGES,
-                            index=PIPELINE_STAGES.index(prop['stage']),
-                            key=f"pipeline_{prop['id']}"
+                            index=PIPELINE_STAGES.index(prop['stage']) if prop['stage'] in PIPELINE_STAGES else 0,
+                            key=f"pipe_{prop['id']}"
                         )
                         if new_stage != prop['stage']:
                             update_property_stage(prop['id'], new_stage)
                             st.rerun()
-                    
-                    with col3:
-                        tier = prop['priority_tier']
-                        tier_colors = {'HOT': '🔴', 'WARM': '🟠', 'NURTURE': '🔵', 'MONITOR': '⚪'}
-                        st.markdown(f"{tier_colors.get(tier, '')} {prop['priority_score']}")
-        else:
-            st.info("No properties in pipeline")
     
-    # =========================================================================
-    # MAP VIEW
-    # =========================================================================
+    # Map View
     elif page == "🗺️ Map View":
         st.header("Property Map")
         
         properties_df = get_all_properties()
         
         if not properties_df.empty:
-            # Filters
-            col1, col2 = st.columns(2)
-            with col1:
-                map_tier = st.selectbox("Filter by Tier", ["All", "HOT", "WARM", "NURTURE", "MONITOR"])
-            with col2:
-                map_city = st.selectbox("Filter by City", ["All"] + list(properties_df['city'].unique()))
+            map_tier = st.selectbox("Filter by Tier", ["All", "HOT", "WARM", "NURTURE", "MONITOR"])
             
             filtered = properties_df.copy()
             if map_tier != "All":
                 filtered = filtered[filtered['priority_tier'] == map_tier]
-            if map_city != "All":
-                filtered = filtered[filtered['city'] == map_city]
             
             st.markdown(f"Showing **{len(filtered)}** properties")
             
-            # Map
             m = create_property_map(filtered)
-            st_folium(m, width=None, height=600, use_container_width=True)
+            st_folium(m, width=None, height=500, use_container_width=True)
             
-            # Legend
-            st.markdown("""
-            **Legend:** 🔴 HOT | 🟠 WARM | 🔵 NURTURE | ⚪ MONITOR
-            """)
-        else:
-            st.info("No properties to display")
+            st.markdown("**Legend:** 🔴 HOT | 🟠 WARM | 🔵 NURTURE | ⚪ MONITOR")
     
-    # =========================================================================
-    # ANALYTICS
-    # =========================================================================
+    # Analytics
     elif page == "📊 Analytics":
         st.header("Analytics Dashboard")
-        
         properties_df = get_all_properties()
         create_analytics_dashboard(properties_df)
     
-    # =========================================================================
-    # ALERTS
-    # =========================================================================
+    # Alerts
     elif "🔔 Alerts" in page:
-        st.header("🔔 Alerts & Notifications")
+        st.header("🔔 Alerts")
         
         alerts_df = get_alerts()
         
         if not alerts_df.empty:
-            unread_count = len(alerts_df[alerts_df['read'] == 0])
-            st.markdown(f"**{unread_count} unread alerts**")
-            
             for _, alert in alerts_df.iterrows():
                 priority_colors = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}
                 is_read = alert['read'] == 1
                 
                 with st.container(border=True):
                     col1, col2 = st.columns([4, 1])
-                    
                     with col1:
-                        if is_read:
-                            st.markdown(f"~~{priority_colors.get(alert['priority'], '⚪')} **{alert['title']}**~~")
-                        else:
-                            st.markdown(f"{priority_colors.get(alert['priority'], '⚪')} **{alert['title']}**")
+                        st.markdown(f"{priority_colors.get(alert['priority'], '⚪')} **{alert['title']}**")
                         st.caption(alert['message'])
-                        st.caption(f"📅 {alert['created_at']}")
-                    
                     with col2:
                         if not is_read:
-                            if st.button("✓ Mark Read", key=f"alert_{alert['id']}"):
+                            if st.button("✓", key=f"alert_{alert['id']}"):
                                 mark_alert_read(alert['id'])
                                 st.rerun()
         else:
             st.info("No alerts")
-        
-        # Alert settings
-        st.markdown("---")
-        st.subheader("Alert Settings")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.checkbox("🔥 New Hot Leads", value=True)
-            st.checkbox("📉 Price Drops (10%+)", value=True)
-            st.checkbox("🏠 New Listings in Target Areas", value=True)
-        with col2:
-            st.checkbox("📞 Follow-up Reminders", value=True)
-            st.checkbox("📊 Weekly Market Reports", value=False)
-            st.checkbox("🎯 Score Changes", value=False)
     
-    # =========================================================================
-    # AI TOOLS
-    # =========================================================================
+    # AI Tools
     elif page == "🤖 AI Tools":
         st.header("🤖 AI-Powered Tools")
         
@@ -2028,7 +1462,6 @@ def main():
         
         with tab1:
             st.subheader("AI ARV Prediction")
-            st.caption("Get AI-powered After Repair Value estimates")
             
             col1, col2 = st.columns(2)
             with col1:
@@ -2038,21 +1471,10 @@ def main():
             with col2:
                 arv_sqft = st.number_input("Square Feet", min_value=500, max_value=5000, value=1500)
                 arv_year = st.number_input("Year Built", min_value=1900, max_value=2024, value=1980)
-                arv_price = st.number_input("Current List Price", min_value=0, value=100000, step=5000)
             
             if st.button("🔮 Predict ARV", type="primary"):
-                prop_data = {
-                    'beds': arv_beds,
-                    'baths': arv_baths,
-                    'sqft': arv_sqft,
-                    'year_built': arv_year,
-                    'list_price': arv_price
-                }
-                
+                prop_data = {'beds': arv_beds, 'baths': arv_baths, 'sqft': arv_sqft, 'year_built': arv_year}
                 prediction = predict_arv(prop_data, arv_city)
-                
-                st.markdown("---")
-                st.subheader("📊 ARV Prediction Results")
                 
                 col1, col2, col3 = st.columns(3)
                 with col1:
@@ -2061,74 +1483,44 @@ def main():
                     st.metric("Confidence", f"{prediction['confidence']}%")
                 with col3:
                     st.metric("Price/Sqft", f"${prediction['price_per_sqft']}")
-                
-                st.markdown(f"**Range:** ${prediction['low_estimate']:,} - ${prediction['high_estimate']:,}")
-                st.markdown(f"**Market Appreciation:** {prediction['appreciation_rate']}% annual")
-                
-                # Show factors
-                with st.expander("View Calculation Factors"):
-                    factors = prediction['factors']
-                    st.write(f"• Base Value: ${factors['base_value']:,}")
-                    st.write(f"• Bedroom Adjustment: ${factors['bed_adjustment']:+,}")
-                    st.write(f"• Bathroom Adjustment: ${factors['bath_adjustment']:+,}")
-                    st.write(f"• Age Multiplier: {factors['age_multiplier']:.2f}x")
-                    st.write(f"• Market Factor: {factors['market_factor']:.2f}x")
         
         with tab2:
             st.subheader("🏘️ Neighborhood Analysis")
-            st.caption("AI analysis of investment potential by area")
             
-            analysis_city = st.selectbox("Select City to Analyze", list(MICHIGAN_CITIES.keys()), key="analysis_city")
+            analysis_city = st.selectbox("Select City", list(MICHIGAN_CITIES.keys()), key="analysis_city")
             
-            if st.button("🔍 Analyze Neighborhood", type="primary"):
+            if st.button("🔍 Analyze", type="primary"):
                 analysis = analyze_neighborhood(analysis_city)
                 
-                st.markdown("---")
-                
                 col1, col2 = st.columns(2)
-                
                 with col1:
-                    st.metric("Neighborhood Score", f"{analysis['score']}/100")
-                    st.metric("Investment Grade", analysis['grade'])
-                    st.info(analysis['investment_outlook'])
-                
+                    st.metric("Score", f"{analysis['score']}/100")
+                    st.metric("Grade", analysis['grade'])
                 with col2:
-                    metrics = analysis['metrics']
-                    st.markdown("**Key Metrics:**")
-                    st.write(f"• 📚 School Rating: {metrics['school_rating']}/10")
-                    st.write(f"• 🛡️ Safety Score: {metrics['crime_score']}/10")
-                    st.write(f"• 🚶 Walkability: {metrics['walkability']}/100")
-                    st.write(f"• 💼 Job Growth: {metrics['job_growth']}%")
-                    st.write(f"• 📈 Appreciation: {metrics['appreciation']}%")
-                    st.write(f"• 👥 Population: {metrics['population_trend']}")
-                    st.write(f"• 🏠 Median Price: ${metrics['median_price']:,}")
+                    st.info(analysis['investment_outlook'])
         
         with tab3:
-            st.subheader("📊 Quick Deal Analyzer")
-            st.caption("Instantly analyze any potential deal")
+            st.subheader("📊 Deal Analyzer")
             
             col1, col2 = st.columns(2)
             with col1:
-                deal_price = st.number_input("Purchase Price", min_value=0, value=100000, step=5000, key="deal_price")
-                deal_arv = st.number_input("Estimated ARV", min_value=0, value=150000, step=5000, key="deal_arv")
+                deal_price = st.number_input("Purchase Price", min_value=0, value=100000, step=5000)
+                deal_arv = st.number_input("Estimated ARV", min_value=0, value=150000, step=5000)
             with col2:
-                deal_repairs = st.number_input("Estimated Repairs", min_value=0, value=30000, step=5000, key="deal_repairs")
-                deal_holding = st.number_input("Holding Months", min_value=1, max_value=12, value=4, key="deal_holding")
+                deal_repairs = st.number_input("Estimated Repairs", min_value=0, value=30000, step=5000)
+                deal_holding = st.number_input("Holding Months", min_value=1, max_value=12, value=4)
             
             if st.button("📊 Analyze Deal", type="primary"):
-                # Calculate
-                holding_costs = deal_arv * 0.01 * deal_holding  # 1% per month
-                selling_costs = deal_arv * 0.09  # 9% selling costs
+                holding_costs = deal_arv * 0.01 * deal_holding
+                selling_costs = deal_arv * 0.09
                 total_investment = deal_price + deal_repairs + holding_costs + selling_costs
                 net_profit = deal_arv - total_investment
                 roi = (net_profit / total_investment * 100) if total_investment > 0 else 0
                 max_offer = (deal_arv * 0.7) - deal_repairs
                 
-                st.markdown("---")
-                
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.metric("Max Offer (70%)", f"${max_offer:,.0f}")
+                    st.metric("Max Offer", f"${max_offer:,.0f}")
                 with col2:
                     st.metric("Total Investment", f"${total_investment:,.0f}")
                 with col3:
@@ -2136,44 +1528,18 @@ def main():
                 with col4:
                     st.metric("ROI", f"{roi:.1f}%")
                 
-                # Verdict
                 if roi >= 20 and net_profit >= 20000:
-                    st.success("✅ GOOD DEAL - Strong returns!")
-                elif roi >= 15 and net_profit >= 15000:
-                    st.info("👍 DECENT DEAL - Acceptable returns")
+                    st.success("✅ GOOD DEAL!")
+                elif roi >= 15:
+                    st.info("👍 DECENT DEAL")
                 elif roi >= 10:
-                    st.warning("⚠️ MARGINAL - Consider negotiating")
+                    st.warning("⚠️ MARGINAL")
                 else:
-                    st.error("❌ PASS - Numbers don't work")
-                
-                # Breakdown
-                with st.expander("View Full Breakdown"):
-                    st.write(f"• Purchase Price: ${deal_price:,}")
-                    st.write(f"• Repairs: ${deal_repairs:,}")
-                    st.write(f"• Holding Costs ({deal_holding} mo): ${holding_costs:,.0f}")
-                    st.write(f"• Selling Costs (9%): ${selling_costs:,.0f}")
-                    st.write(f"• **Total Investment: ${total_investment:,.0f}**")
-                    st.write(f"• ARV: ${deal_arv:,}")
-                    st.write(f"• **Net Profit: ${net_profit:,.0f}**")
+                    st.error("❌ PASS")
     
-    # =========================================================================
-    # SETTINGS
-    # =========================================================================
+    # Settings
     elif page == "⚙️ Settings":
         st.header("Settings")
-        
-        st.subheader("🔑 API Configuration")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.toggle("Use Demo Data", value=st.session_state.use_mock_data, key="settings_mock")
-        with col2:
-            if not st.session_state.use_mock_data:
-                new_key = st.text_input("RealEstateAPI Key", type="password", value=st.session_state.api_key)
-                if new_key:
-                    st.session_state.api_key = new_key
-        
-        st.markdown("---")
         
         st.subheader("📊 Database")
         properties_df = get_all_properties()
@@ -2203,40 +1569,6 @@ def main():
                 conn.close()
                 st.success("Data cleared!")
                 st.rerun()
-        
-        st.markdown("---")
-        
-        st.subheader("☁️ Cloud Deployment")
-        st.markdown("""
-        **To deploy to Streamlit Cloud:**
-        1. Create a GitHub account if you don't have one
-        2. Create a new repository
-        3. Upload these files: `flipfinder_pro.py`, `requirements.txt`
-        4. Go to [share.streamlit.io](https://share.streamlit.io)
-        5. Connect your GitHub
-        6. Select your repository
-        7. Click Deploy!
-        
-        **Your app will be live at:** `https://your-username-flipfinder-pro.streamlit.app`
-        """)
-        
-        st.markdown("---")
-        st.subheader("📖 About")
-        st.markdown("""
-        **FlipFinder Pro v2.0**
-        
-        AI-Powered Michigan Fix & Flip Investment Platform
-        
-        **Features:**
-        - ✅ Real-time property search
-        - ✅ AI priority scoring (0-100)
-        - ✅ ARV prediction
-        - ✅ Neighborhood analysis
-        - ✅ Interactive maps
-        - ✅ Deal pipeline management
-        - ✅ CMA report generation
-        - ✅ Alert system
-        """)
 
 if __name__ == "__main__":
     main()
