@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlipFinder Pro - Michigan Fix & Flip Investment Platform</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%236366f1' width='100' height='100' rx='20'/><text y='.9em' x='50%' text-anchor='middle' font-size='60' fill='white' font-family='sans-serif' font-weight='bold'>FF</text></svg>">
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-type="module">
+// ============================================================================
+// FLIPFINDER PRO - Michigan Fix & Flip Investment Platform
+// Complete Feature Implementation
+// ============================================================================
+
+const { useState, useEffect, useCallback, useMemo } = React;
+
+// Mock Data & Constants
+const MICHIGAN_CITIES = [
+  'Detroit', 'Grand Rapids', 'Warren', 'Sterling Heights', 'Ann Arbor',
+  'Lansing', 'Flint', 'Dearborn', 'Livonia', 'Troy', 'Westland', 'Farmington Hills',
+  'Kalamazoo', 'Wyoming', 'Southfield', 'Rochester Hills', 'Taylor', 'Pontiac',
+  'St. Clair Shores', 'Royal Oak', 'Novi', 'Battle Creek', 'Saginaw', 'Muskegon'
+];
+
+const PROPERTY_TYPES = ['Single Family', 'Multi-Family', 'Condo', 'Townhouse', 'Land'];
+const DISTRESS_SIGNALS = ['Pre-Foreclosure', 'Foreclosure', 'Auction', 'Tax Lien', 'Vacant', 'Absentee Owner', 'Probate/Estate', 'Divorce', 'Code Violation'];
+
+const PIPELINE_STAGES = [
+  { id: 'new', label: 'New Lead', color: '#6366f1' },
+  { id: 'contacted', label: 'Contacted', color: '#8b5cf6' },
+  { id: 'qualified', label: 'Qualified', color: '#06b6d4' },
+  { id: 'offer', label: 'Offer Made', color: '#f59e0b' },
+  { id: 'contract', label: 'Under Contract', color: '#10b981' },
+  { id: 'closed', label: 'Closed', color: '#22c55e' },
+  { id: 'dead', label: 'Dead/Lost', color: '#ef4444' }
+];
+
+const TEAM_MEMBERS = [
+  { id: 1, name: 'Mike Johnson', role: 'Acquisitions Manager', avatar: '👨‍💼', deals: 12, calls: 89 },
+  { id: 2, name: 'Sarah Williams', role: 'Scout', avatar: '🔍', deals: 8, calls: 156 },
+  { id: 3, name: 'David Chen', role: 'Operations', avatar: '⚙️', deals: 5, calls: 42 },
+  { id: 4, name: 'Emily Brown', role: 'Admin', avatar: '📋', deals: 0, calls: 234 }
+];
+
+const OUTREACH_TEMPLATES = [
+  { id: 1, name: 'Pre-Foreclosure Owner', category: 'distress', subject: 'Quick Solution for {address}' },
+  { id: 2, name: 'Absentee Owner', category: 'landlord', subject: 'Interest in Your Property at {address}' },
+  { id: 3, name: 'Inherited Property', category: 'probate', subject: 'Simplified Sale for {address}' },
+  { id: 4, name: 'Tired Landlord', category: 'landlord', subject: 'Ready to Exit? {address}' },
+  { id: 5, name: 'Vacant Property', category: 'distress', subject: 'Cash Offer for {address}' },
+  { id: 6, name: 'Tax Lien Owner', category: 'distress', subject: 'Resolve Your Tax Situation - {address}' },
+  { id: 7, name: 'Divorce Situation', category: 'life-event', subject: 'Quick Resolution for {address}' },
+  { id: 8, name: 'Agent Inquiry', category: 'listed', subject: 'Cash Buyer for {address}' }
+];
+
+// Generate mock properties
+const generateMockProperties = (count = 50) => {
+  const properties = [];
+  const streets = ['Oak St', 'Maple Ave', 'Cedar Rd', 'Pine Dr', 'Elm Blvd', 'Main St', 'First Ave', 'Lake Dr', 'Park Rd', 'Highland Ave'];
+  
+  for (let i = 1; i <= count; i++) {
+    const city = MICHIGAN_CITIES[Math.floor(Math.random() * MICHIGAN_CITIES.length)];
+    const street = streets[Math.floor(Math.random() * streets.length)];
+    const streetNum = Math.floor(Math.random() * 9000) + 1000;
+    const beds = Math.floor(Math.random() * 4) + 2;
+    const baths = Math.floor(Math.random() * 3) + 1;
+    const sqft = Math.floor(Math.random() * 2000) + 1000;
+    const yearBuilt = Math.floor(Math.random() * 70) + 1950;
+    const lotSize = (Math.random() * 0.5 + 0.1).toFixed(2);
+    const listPrice = Math.floor(Math.random() * 200000) + 50000;
+    const estimatedValue = Math.floor(listPrice * (Math.random() * 0.4 + 0.9));
+    const arv = Math.floor(estimatedValue * (Math.random() * 0.3 + 1.1));
+    const mortgageBalance = Math.floor(listPrice * (Math.random() * 0.7));
+    const equity = estimatedValue - mortgageBalance;
+    const daysOnMarket = Math.floor(Math.random() * 180);
+    const priceReductions = Math.floor(Math.random() * 3);
+    const ownershipYears = Math.floor(Math.random() * 25) + 1;
+    
+    const signals = [];
+    DISTRESS_SIGNALS.forEach(signal => {
+      if (Math.random() > 0.7) signals.push(signal);
+    });
+    
+    const lat = 42.3 + (Math.random() * 1.5);
+    const lng = -83.5 + (Math.random() * 1.5);
+    
+    properties.push({
+      id: i,
+      address: `${streetNum} ${street}`,
+      city,
+      state: 'MI',
+      zip: `48${Math.floor(Math.random() * 900) + 100}`,
+      beds,
+      baths,
+      sqft,
+      yearBuilt,
+      lotSize,
+      propertyType: PROPERTY_TYPES[Math.floor(Math.random() * PROPERTY_TYPES.length)],
+      listPrice,
+      estimatedValue,
+      arv,
+      mortgageBalance,
+      equity,
+      equityPercent: Math.round((equity / estimatedValue) * 100),
+      daysOnMarket,
+      priceReductions,
+      ownershipYears,
+      distressSignals: signals,
+      owner: {
+        name: `${['John', 'Mary', 'Robert', 'Patricia', 'Michael', 'Jennifer'][Math.floor(Math.random() * 6)]} ${['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia'][Math.floor(Math.random() * 6)]}`,
+        mailingAddress: `${Math.floor(Math.random() * 9000) + 1000} ${streets[Math.floor(Math.random() * streets.length)]}, ${MICHIGAN_CITIES[Math.floor(Math.random() * MICHIGAN_CITIES.length)]}, MI`,
+        phone: `(${Math.floor(Math.random() * 900) + 100}) ${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 9000) + 1000}`,
+        email: `owner${i}@email.com`,
+        ownerType: Math.random() > 0.5 ? 'Individual' : 'LLC'
+      },
+      lat,
+      lng,
+      lastSale: {
+        date: `${Math.floor(Math.random() * 12) + 1}/${Math.floor(Math.random() * 28) + 1}/${2024 - Math.floor(Math.random() * 10)}`,
+        price: Math.floor(listPrice * (Math.random() * 0.3 + 0.5))
+      },
+      photos: [
+        `https://placehold.co/800x600/1a1a2e/ffffff?text=Property+${i}`,
+        `https://placehold.co/800x600/16213e/ffffff?text=Interior+${i}`,
+        `https://placehold.co/800x600/0f3460/ffffff?text=Kitchen+${i}`
+      ],
+      stage: PIPELINE_STAGES[Math.floor(Math.random() * 4)].id,
+      assignedTo: Math.random() > 0.5 ? TEAM_MEMBERS[Math.floor(Math.random() * TEAM_MEMBERS.length)].id : null,
+      notes: [],
+      followUps: [],
+      createdAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString()
+    });
+  }
+  return properties;
+};
+
+// Priority Scoring Engine
+const calculatePriorityScore = (property) => {
+  let score = 0;
+  let factors = [];
+  
+  // Profit Potential (0-40 points)
+  const maxOffer = (property.arv * 0.7) - 30000;
+  const gap = maxOffer - property.listPrice;
+  const gapPercent = (gap / property.arv) * 100;
+  const roi = ((property.arv - property.listPrice - 30000) / (property.listPrice + 30000)) * 100;
+  
+  if (gapPercent >= 15) { score += 25; factors.push({ name: 'Excellent Price Gap', points: 25 }); }
+  else if (gapPercent >= 10) { score += 20; factors.push({ name: 'Great Price Gap', points: 20 }); }
+  else if (gapPercent >= 5) { score += 15; factors.push({ name: 'Good Price Gap', points: 15 }); }
+  else if (gapPercent >= 0) { score += 10; factors.push({ name: 'At Max Offer', points: 10 }); }
+  else if (gapPercent >= -10) { score += 5; factors.push({ name: 'Negotiable', points: 5 }); }
+  
+  if (roi >= 30) { score += 15; factors.push({ name: 'Excellent ROI (30%+)', points: 15 }); }
+  else if (roi >= 20) { score += 12; factors.push({ name: 'Strong ROI (20%+)', points: 12 }); }
+  else if (roi >= 15) { score += 8; factors.push({ name: 'Good ROI (15%+)', points: 8 }); }
+  else if (roi >= 10) { score += 5; factors.push({ name: 'Acceptable ROI (10%+)', points: 5 }); }
+  
+  // Seller Motivation (0-35 points)
+  const signals = property.distressSignals || [];
+  if (signals.includes('Foreclosure')) { score += 15; factors.push({ name: 'Active Foreclosure', points: 15 }); }
+  if (signals.includes('Pre-Foreclosure')) { score += 12; factors.push({ name: 'Pre-Foreclosure', points: 12 }); }
+  if (signals.includes('Probate/Estate')) { score += 12; factors.push({ name: 'Inherited/Estate', points: 12 }); }
+  if (signals.includes('Divorce')) { score += 10; factors.push({ name: 'Divorce', points: 10 }); }
+  if (signals.includes('Tax Lien')) { score += 10; factors.push({ name: 'Tax Lien', points: 10 }); }
+  if (signals.includes('Absentee Owner')) { score += 6; factors.push({ name: 'Absentee Owner', points: 6 }); }
+  if (signals.includes('Vacant')) { score += 8; factors.push({ name: 'Vacant Property', points: 8 }); }
+  if (property.ownershipYears >= 15) { score += 5; factors.push({ name: 'Long Ownership (15+ yrs)', points: 5 }); }
+  if (property.equityPercent >= 70) { score += 6; factors.push({ name: 'High Equity (70%+)', points: 6 }); }
+  if (signals.length >= 5) { score += 8; factors.push({ name: 'Multiple Signals Stacked', points: 8 }); }
+  else if (signals.length >= 3) { score += 5; factors.push({ name: 'Multiple Signals', points: 5 }); }
+  
+  // Urgency/Timing (0-15 points)
+  if (property.daysOnMarket >= 90) { score += 8; factors.push({ name: 'Stale Listing (90+ days)', points: 8 }); }
+  else if (property.daysOnMarket >= 60) { score += 5; factors.push({ name: 'Getting Stale (60+ days)', points: 5 }); }
+  if (property.priceReductions >= 2) { score += 8; factors.push({ name: 'Multiple Price Drops', points: 8 }); }
+  else if (property.priceReductions >= 1) { score += 5; factors.push({ name: 'Price Reduced', points: 5 }); }
+  
+  // Contact Accessibility (0-10 points)
+  if (property.owner?.phone) { score += 5; factors.push({ name: 'Phone Available', points: 5 }); }
+  if (property.owner?.email) { score += 3; factors.push({ name: 'Email Available', points: 3 }); }
+  
+  return {
+    score: Math.min(100, score),
+    factors,
+    tier: score >= 75 ? 'HOT' : score >= 55 ? 'WARM' : score >= 35 ? 'NURTURE' : 'MONITOR',
+    maxOffer,
+    roi: roi.toFixed(1),
+    gapPercent: gapPercent.toFixed(1)
+  };
+};
+
+// Property Search Component
+const PropertySearch = ({ filters, setFilters, onSearch, onClear }) => {
+  return (
+    <div className="search-panel animate-fade-in">
+      <div className="search-row">
+        <div className="form-group">
+          <label className="form-label">City</label>
+          <select 
+            className="form-select"
+            value={filters.city}
+            onChange={(e) => setFilters({ ...filters, city: e.target.value })}
+          >
+            <option value="">All Michigan Cities</option>
+            {MICHIGAN_CITIES.map(city => (
+              <option key={city} value={city}>{city}</option>
+            ))}
+          </select>
+        </div>
+        
+        <div className="form-group">
+          <label className="form-label">Property Type</label>
+          <select 
+            className="form-select"
+            value={filters.propertyType}
+            onChange={(e) => setFilters({ ...filters, propertyType: e.target.value })}
+          >
+            <option value="">All Types</option>
+            {PROPERTY_TYPES.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+        
+        <div className="form-group">
+          <label className="form-label">Min Price</label>
+          <input 
+            type="number" 
+            className="form-input"
+            placeholder="$0"
+            value={filters.minPrice}
+            onChange={(e) => setFilters({ ...filters, minPrice: e.target.value })}
+          />
+        </div>
+        
+        <div className="form-group">
+          <label className="form-label">Max Price</label>
+          <input 
+            type="number" 
+            className="form-input"
+            placeholder="$500,000"
+            value={filters.maxPrice}
+            onChange={(e) => setFilters({ ...filters, maxPrice: e.target.value })}
+          />
+        </div>
+      </div>
+      
+      <div className="form-group">
+        <label className="form-label">Distress Signals</label>
+        <div className="form-checkbox-group">
+          {DISTRESS_SIGNALS.map(signal => (
+            <label 
+              key={signal}
+              className={`form-checkbox-label ${filters.signals.includes(signal) ? 'checked' : ''}`}
+            >
+              <input 
+                type="checkbox"
+                checked={filters.signals.includes(signal)}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setFilters({ ...filters, signals: [...filters.signals, signal] });
+                  } else {
+                    setFilters({ ...filters, signals: filters.signals.filter(s => s !== signal) });
+                  }
+                }}
+                style={{ display: 'none' }}
+              />
+              {signal}
+            </label>
+          ))}
+        </div>
+      </div>
+      
+      <div className="search-row">
+        <div className="form-group">
+          <label className="form-label">Min Beds</label>
+          <select 
+            className="form-select"
+            value={filters.minBeds}
+            onChange={(e) => setFilters({ ...filters, minBeds: e.target.value })}
+          >
+            <option value="">Any</option>
+            {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}+</option>)}
+          </select>
+        </div>
+        
+        <div className="form-group">
+          <label className="form-label">Min Equity %</label>
+          <select 
+            className="form-select"
+            value={filters.minEquity}
+            onChange={(e) => setFilters({ ...filters, minEquity: e.target.value })}
+          >
+            <option value="">Any</option>
+            <option value="30">30%+</option>
+            <option value="50">50%+</option>
+            <option value="70">70%+</option>
+          </select>
+        </div>
+        
+        <div className="form-group">
+          <label className="form-label">Priority Tier</label>
+          <select 
+            className="form-select"
+            value={filters.priorityTier}
+            onChange={(e) => setFilters({ ...filters, priorityTier: e.target.value })}
+          >
+            <option value="">All Tiers</option>
+            <option value="HOT">🔥 Hot (75-100)</option>
+            <option value="WARM">🌡️ Warm (55-74)</option>
+            <option value="NURTURE">💧 Nurture (35-54)</option>
+            <option value="MONITOR">👀 Monitor (0-34)</option>
+          </select>
+        </div>
+        
+        <div className="form-group">
+          <label className="form-label">Days on Market</label>
+          <select 
+            className="form-select"
+            value={filters.daysOnMarket}
+            onChange={(e) => setFilters({ ...filters, daysOnMarket: e.target.value })}
+          >
+            <option value="">Any</option>
+            <option value="30">30+ days</option>
+            <option value="60">60+ days</option>
+            <option value="90">90+ days</option>
+          </select>
+        </div>
+      </div>
+      
+      <div className="search-actions">
+        <button className="btn btn-secondary" onClick={onClear}>Clear Filters</button>
+        <button className="btn btn-primary" onClick={onSearch}>🔍 Search Properties</button>
+      </div>
+    </div>
+  );
+};
+
+// Property Card Component
+const PropertyCard = ({ property, onClick }) => {
+  const priority = calculatePriorityScore(property);
+  
+  return (
+    <div className="property-card" onClick={() => onClick(property)}>
+      <div className="property-image">
+        <img src={property.photos[0]} alt={property.address} />
+        <div className="property-badges">
+          {property.distressSignals.slice(0, 3).map(signal => (
+            <span key={signal} className={`property-badge ${signal === 'Vacant' ? 'vacant' : 'distress'}`}>
+              {signal}
+            </span>
+          ))}
+        </div>
+        <div className={`property-score ${priority.tier.toLowerCase()}`}>
+          {priority.score}
+        </div>
+      </div>
+      <div className="property-content">
+        <div className="property-address">{property.address}</div>
+        <div className="property-location">{property.city}, {property.state} {property.zip}</div>
+        <div className="property-specs">
+          <span className="property-spec">🛏️ {property.beds}</span>
+          <span className="property-spec">🚿 {property.baths}</span>
+          <span className="property-spec">📐 {property.sqft.toLocaleString()} sqft</span>
+          <span className="property-spec">📅 {property.yearBuilt}</span>
+        </div>
+        <div className="property-pricing">
+          <div className="price-item">
+            <div className="price-label">List Price</div>
+            <div className="price-value">${property.listPrice.toLocaleString()}</div>
+          </div>
+          <div className="price-item">
+            <div className="price-label">ARV</div>
+            <div className="price-value success">${property.arv.toLocaleString()}</div>
+          </div>
+          <div className="price-item">
+            <div className="price-label">Max Offer</div>
+            <div className="price-value">${priority.maxOffer.toLocaleString()}</div>
+          </div>
+          <div className="price-item">
+            <div className="price-label">Est. ROI</div>
+            <div className={`price-value ${parseFloat(priority.roi) > 0 ? 'success' : 'danger'}`}>
+              {priority.roi}%
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Dashboard Stats Component
+const DashboardStats = ({ properties }) => {
+  const stats = useMemo(() => {
+    const hotLeads = properties.filter(p => calculatePriorityScore(p).tier === 'HOT').length;
+    const warmLeads = properties.filter(p => calculatePriorityScore(p).tier === 'WARM').length;
+    const totalValue = properties.reduce((sum, p) => sum + p.listPrice, 0);
+    const avgROI = properties.reduce((sum, p) => sum + parseFloat(calculatePriorityScore(p).roi), 0) / properties.length;
+    
+    return { hotLeads, warmLeads, totalValue, avgROI };
+  }, [properties]);
+  
+  return (
+    <div className="stats-grid">
+      <div className="stat-card">
+        <div className="stat-icon">🔥</div>
+        <div className="stat-value">{stats.hotLeads}</div>
+        <div className="stat-label">Hot Leads</div>
+        <div className="stat-change positive">↑ Ready to contact today</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-icon">🌡️</div>
+        <div className="stat-value">{stats.warmLeads}</div>
+        <div className="stat-label">Warm Leads</div>
+        <div className="stat-change">Contact this week</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-icon">🏠</div>
+        <div className="stat-value">{properties.length}</div>
+        <div className="stat-label">Total Properties</div>
+        <div className="stat-change positive">↑ 12% vs last week</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-icon">💰</div>
+        <div className="stat-value">${(stats.totalValue / 1000000).toFixed(1)}M</div>
+        <div className="stat-label">Pipeline Value</div>
+        <div className="stat-change positive">↑ 8% vs last month</div>
+      </div>
+      <div className="stat-card">
+        <div className="stat-icon">📈</div>
+        <div className="stat-value">{stats.avgROI.toFixed(1)}%</div>
+        <div className="stat-label">Avg Potential ROI</div>
+        <div className="stat-change positive">Strong opportunities</div>
+      </div>
+    </div>
+  );
+};
+
+// Pipeline Kanban Component
+const PipelineKanban = ({ properties, onPropertyClick }) => {
+  const getPropertiesByStage = (stageId) => {
+    return properties.filter(p => p.stage === stageId);
+  };
+  
+  return (
+    <div className="pipeline-container">
+      {PIPELINE_STAGES.map(stage => (
+        <div key={stage.id} className="pipeline-column">
+          <div className="pipeline-header">
+            <div className="pipeline-title">
+              <div className="pipeline-dot" style={{ backgroundColor: stage.color }}></div>
+              <span>{stage.label}</span>
+            </div>
+            <span className="pipeline-count">{getPropertiesByStage(stage.id).length}</span>
+          </div>
+          <div className="pipeline-cards">
+            {getPropertiesByStage(stage.id).map(property => {
+              const priority = calculatePriorityScore(property);
+              return (
+                <div 
+                  key={property.id} 
+                  className="pipeline-card"
+                  onClick={() => onPropertyClick(property)}
+                >
+                  <div className="pipeline-card-address">{property.address}</div>
+                  <div className="pipeline-card-city">{property.city}, MI</div>
+                  <div className="pipeline-card-price">${property.listPrice.toLocaleString()}</div>
+                  <div className="pipeline-card-meta">
+                    <span className={`priority-badge priority-${priority.tier.toLowerCase()}`}>
+                      {priority.tier}
+                    </span>
+                    <span>{property.beds}bd/{property.baths}ba</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Team Management Component
+const TeamManagement = () => {
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-3">
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Team Management</h2>
+        <button className="btn btn-primary">➕ Add Team Member</button>
+      </div>
+      
+      <div className="team-grid">
+        {TEAM_MEMBERS.map(member => (
+          <div key={member.id} className="team-card">
+            <div className="team-avatar">{member.avatar}</div>
+            <div className="team-name">{member.name}</div>
+            <div className="team-role">{member.role}</div>
+            <div className="team-stats">
+              <div>
+                <div className="team-stat-value">{member.deals}</div>
+                <div className="team-stat-label">Deals Closed</div>
+              </div>
+              <div>
+                <div className="team-stat-value">{member.calls}</div>
+                <div className="team-stat-label">Calls Made</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Outreach Templates Component
+const OutreachTemplates = () => {
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  
+  const templateContent = {
+    1: {
+      email: `Subject: Quick Solution for Your Property at {address}
+
+Hi {owner_name},
+
+I noticed your property at {address} may be facing some financial challenges. I specialize in helping homeowners in similar situations find quick, fair solutions.
+
+I'm a local investor who can:
+• Close in as little as 14 days
+• Buy as-is - no repairs needed
+• Pay all closing costs
+• Work around your timeline
+
+Would you be open to a quick 5-minute call to discuss your options? No pressure, just information.
+
+Best regards,
+[Your Name]
+[Your Phone]`,
+      script: `Hi, is this {owner_name}? This is [Your Name], a local real estate investor. I noticed your property at {address} and wanted to reach out.
+
+I help homeowners who may be looking for a quick, hassle-free sale. I can close fast, buy as-is, and work around your timeline.
+
+Would you have a few minutes to chat about your situation?`,
+      voicemail: `Hi {owner_name}, this is [Your Name], a local investor. I'm reaching out about your property at {address}. I help homeowners sell quickly without the hassle. Call me back at [Your Phone]. Thanks!`
+    }
+  };
+  
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-3">
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Outreach Templates</h2>
+        <button className="btn btn-primary">➕ Create Template</button>
+      </div>
+      
+      <div className="templates-grid">
+        {OUTREACH_TEMPLATES.map(template => (
+          <div 
+            key={template.id} 
+            className="template-card"
+            onClick={() => setSelectedTemplate(template.id === selectedTemplate ? null : template.id)}
+          >
+            <div className="template-category">{template.category}</div>
+            <div className="template-name">{template.name}</div>
+            <div className="template-preview">Subject: {template.subject}</div>
+          </div>
+        ))}
+      </div>
+      
+      {selectedTemplate && templateContent[selectedTemplate] && (
+        <div className="detail-section mt-3 animate-fade-in">
+          <div className="detail-section-title">📧 Template Details</div>
+          
+          <div className="form-group">
+            <label className="form-label">Email Template</label>
+            <textarea 
+              className="form-textarea"
+              rows={8}
+              value={templateContent[selectedTemplate].email}
+              readOnly
+              style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}
+            ></textarea>
+          </div>
+          
+          <div className="form-group">
+            <label className="form-label">Phone Script</label>
+            <textarea 
+              className="form-textarea"
+              rows={4}
+              value={templateContent[selectedTemplate].script}
+              readOnly
+              style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}
+            ></textarea>
+          </div>
+          
+          <div className="flex gap-2">
+            <button className="btn btn-primary">📋 Copy Email</button>
+            <button className="btn btn-secondary">📞 Copy Script</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Reports Component
+const ReportsAnalytics = () => {
+  const reports = [
+    { icon: '📊', title: 'Pipeline Report', description: 'Deals by stage, total value, velocity metrics' },
+    { icon: '📞', title: 'Activity Report', description: 'Calls, emails, offers by team member' },
+    { icon: '🎯', title: 'Source Report', description: 'Lead source effectiveness, cost per lead' },
+    { icon: '📈', title: 'Conversion Report', description: 'Stage-to-stage conversion rates' },
+    { icon: '🏘️', title: 'Market Report', description: 'Price trends, DOM, inventory by area' },
+    { icon: '💰', title: 'Profit Report', description: 'Closed deals, profit margins, ROI' },
+    { icon: '👥', title: 'Team Performance', description: 'Individual metrics, rankings, goals' },
+    { icon: '📣', title: 'Marketing ROI', description: 'Cost per acquisition by channel' }
+  ];
+  
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-3">
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Reports & Analytics</h2>
+        <button className="btn btn-primary">📥 Export All Data</button>
+      </div>
+      
+      <div className="reports-grid">
+        {reports.map((report, idx) => (
+          <div key={idx} className="report-card">
+            <div className="report-icon">{report.icon}</div>
+            <div className="report-title">{report.title}</div>
+            <div className="report-description">{report.description}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Notifications Component
+const NotificationsPanel = ({ show, onClose }) => {
+  const notifications = [
+    { id: 1, type: 'hot', title: 'New Hot Lead!', message: '1234 Oak St scored 85 points', time: '5 min ago', unread: true },
+    { id: 2, type: 'price', title: 'Price Drop Alert', message: '5678 Maple Ave dropped 8%', time: '1 hour ago', unread: true },
+    { id: 3, type: 'followup', title: 'Follow-up Due', message: 'Call scheduled for 9012 Pine Dr', time: '2 hours ago', unread: false },
+    { id: 4, type: 'match', title: 'New Listing Match', message: '3 new properties in Detroit', time: '3 hours ago', unread: false },
+  ];
+  
+  if (!show) return null;
+  
+  return (
+    <div className="notifications-panel animate-fade-in">
+      <div className="notifications-header">
+        <span style={{ fontWeight: 600 }}>Notifications</span>
+        <button className="btn btn-sm btn-secondary" onClick={onClose}>✕</button>
+      </div>
+      <div className="notifications-list">
+        {notifications.map(notif => (
+          <div key={notif.id} className={`notification-item ${notif.unread ? 'unread' : ''}`}>
+            <div className={`notification-icon ${notif.type}`}>
+              {notif.type === 'hot' ? '🔥' : notif.type === 'price' ? '💰' : notif.type === 'followup' ? '📞' : '🏠'}
+            </div>
+            <div className="notification-content">
+              <div className="notification-title">{notif.title}</div>
+              <div className="notification-message">{notif.message}</div>
+              <div className="notification-time">{notif.time}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Settings Component
+const SettingsPanel = () => {
+  const [apiKey, setApiKey] = useState('');
+  
+  return (
+    <div>
+      <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1.5rem' }}>Settings</h2>
+      
+      <div className="settings-section">
+        <div className="settings-title">🔑 API Configuration</div>
+        <div className="form-group">
+          <label className="form-label">RealEstateAPI.com API Key</label>
+          <input 
+            type="password"
+            className="form-input"
+            placeholder="Enter your API key"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+          />
+        </div>
+        <button className="btn btn-primary">Save API Key</button>
+      </div>
+    </div>
+  );
+};
+
+// Property Detail Modal (Simplified for HTML version)
+const PropertyDetailModal = ({ property, onClose, onUpdate }) => {
+  const priority = calculatePriorityScore(property);
+  
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content animate-fade-in" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+              {property.address}
+            </h2>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+              {property.city}, {property.state} {property.zip}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`priority-badge priority-${priority.tier.toLowerCase()}`}>
+              {priority.tier} • Score: {priority.score}
+            </span>
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
+        </div>
+        
+        <div className="modal-body">
+          <div className="detail-grid">
+            <div className="detail-section">
+              <div className="detail-section-title">🏠 Property Details</div>
+              <div className="detail-row"><span className="detail-label">Type</span><span className="detail-value">{property.propertyType}</span></div>
+              <div className="detail-row"><span className="detail-label">Beds/Baths</span><span className="detail-value">{property.beds}/{property.baths}</span></div>
+              <div className="detail-row"><span className="detail-label">Sqft</span><span className="detail-value">{property.sqft.toLocaleString()}</span></div>
+              <div className="detail-row"><span className="detail-label">Year Built</span><span className="detail-value">{property.yearBuilt}</span></div>
+            </div>
+            
+            <div className="detail-section">
+              <div className="detail-section-title">💵 Financials</div>
+              <div className="detail-row"><span className="detail-label">List Price</span><span className="detail-value">${property.listPrice.toLocaleString()}</span></div>
+              <div className="detail-row"><span className="detail-label">ARV</span><span className="detail-value text-success">${property.arv.toLocaleString()}</span></div>
+              <div className="detail-row"><span className="detail-label">Max Offer</span><span className="detail-value">${priority.maxOffer.toLocaleString()}</span></div>
+              <div className="detail-row"><span className="detail-label">Est. ROI</span><span className="detail-value text-success">{priority.roi}%</span></div>
+            </div>
+            
+            <div className="detail-section">
+              <div className="detail-section-title">👤 Owner Info</div>
+              <div className="detail-row"><span className="detail-label">Name</span><span className="detail-value">{property.owner.name}</span></div>
+              <div className="detail-row"><span className="detail-label">Phone</span><span className="detail-value">{property.owner.phone}</span></div>
+              <div className="detail-row"><span className="detail-label">Email</span><span className="detail-value">{property.owner.email}</span></div>
+            </div>
+            
+            <div className="detail-section">
+              <div className="detail-section-title">🚨 Distress Signals</div>
+              {property.distressSignals.length > 0 ? (
+                property.distressSignals.map(signal => (
+                  <div key={signal} className="detail-row">
+                    <span className="detail-value text-warning">⚠️ {signal}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="detail-row"><span className="detail-label">None detected</span></div>
+              )}
+            </div>
+          </div>
+          
+          <div className="mt-3 flex gap-2">
+            <button className="btn btn-primary">📞 Call Owner</button>
+            <button className="btn btn-secondary">✉️ Send Email</button>
+            <button className="btn btn-secondary">📄 Generate CMA</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// MAIN APP
+function FlipFinderPro() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [properties, setProperties] = useState([]);
+  const [filteredProperties, setFilteredProperties] = useState([]);
+  const [selectedProperty, setSelectedProperty] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [filters, setFilters] = useState({
+    city: '', propertyType: '', minPrice: '', maxPrice: '',
+    signals: [], minBeds: '', minEquity: '', priorityTier: '', daysOnMarket: ''
+  });
+  
+  useEffect(() => {
+    const mockProperties = generateMockProperties(50);
+    setProperties(mockProperties);
+    setFilteredProperties(mockProperties);
+  }, []);
+  
+  const handleSearch = useCallback(() => {
+    let result = [...properties];
+    if (filters.city) result = result.filter(p => p.city === filters.city);
+    if (filters.propertyType) result = result.filter(p => p.propertyType === filters.propertyType);
+    if (filters.minPrice) result = result.filter(p => p.listPrice >= parseInt(filters.minPrice));
+    if (filters.maxPrice) result = result.filter(p => p.listPrice <= parseInt(filters.maxPrice));
+    if (filters.signals.length > 0) result = result.filter(p => filters.signals.some(s => p.distressSignals.includes(s)));
+    if (filters.minBeds) result = result.filter(p => p.beds >= parseInt(filters.minBeds));
+    if (filters.minEquity) result = result.filter(p => p.equityPercent >= parseInt(filters.minEquity));
+    if (filters.priorityTier) result = result.filter(p => calculatePriorityScore(p).tier === filters.priorityTier);
+    if (filters.daysOnMarket) result = result.filter(p => p.daysOnMarket >= parseInt(filters.daysOnMarket));
+    result.sort((a, b) => calculatePriorityScore(b).score - calculatePriorityScore(a).score);
+    setFilteredProperties(result);
+  }, [properties, filters]);
+  
+  const handleClearFilters = () => {
+    setFilters({ city: '', propertyType: '', minPrice: '', maxPrice: '', signals: [], minBeds: '', minEquity: '', priorityTier: '', daysOnMarket: '' });
+    setFilteredProperties(properties);
+  };
+  
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return (
+          <div>
+            <DashboardStats properties={properties} />
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">🔥 Hot Leads - Contact Today</span>
+              </div>
+              <div className="card-body">
+                <div className="property-grid">
+                  {filteredProperties.filter(p => calculatePriorityScore(p).tier === 'HOT').slice(0, 6).map(property => (
+                    <PropertyCard key={property.id} property={property} onClick={setSelectedProperty} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'search':
+        return (
+          <div>
+            <PropertySearch filters={filters} setFilters={setFilters} onSearch={handleSearch} onClear={handleClearFilters} />
+            <div className="flex justify-between items-center mb-3">
+              <span style={{ color: 'var(--text-secondary)' }}>Showing {filteredProperties.length} properties</span>
+            </div>
+            <div className="property-grid">
+              {filteredProperties.map(property => (
+                <PropertyCard key={property.id} property={property} onClick={setSelectedProperty} />
+              ))}
+            </div>
+          </div>
+        );
+      case 'pipeline':
+        return (
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Deal Pipeline</h2>
+            <PipelineKanban properties={properties} onPropertyClick={setSelectedProperty} />
+          </div>
+        );
+      case 'priority':
+        return (
+          <div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Contact Priority Queue</h2>
+            <div className="property-grid">
+              {[...filteredProperties].sort((a, b) => calculatePriorityScore(b).score - calculatePriorityScore(a).score).map(property => (
+                <PropertyCard key={property.id} property={property} onClick={setSelectedProperty} />
+              ))}
+            </div>
+          </div>
+        );
+      case 'team': return <TeamManagement />;
+      case 'templates': return <OutreachTemplates />;
+      case 'reports': return <ReportsAnalytics />;
+      case 'settings': return <SettingsPanel />;
+      default: return null;
+    }
+  };
+  
+  return (
+    <div className="app-container">
+      <header className="header">
+        <div className="logo">
+          <div className="logo-icon">FF</div>
+          <span className="logo-text">FlipFinder Pro</span>
+        </div>
+        <div className="header-actions">
+          <button className="notification-btn" onClick={() => setShowNotifications(!showNotifications)}>
+            🔔<span className="notification-badge">3</span>
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingLeft: '1rem', borderLeft: '1px solid var(--border-color)' }}>
+            <span style={{ fontSize: '1.5rem' }}>👤</span>
+            <span style={{ fontSize: '0.875rem' }}>Investor</span>
+          </div>
+        </div>
+      </header>
+      
+      <nav className="nav-tabs">
+        {[
+          { id: 'dashboard', label: '📊 Dashboard' },
+          { id: 'search', label: '🔍 Property Search' },
+          { id: 'pipeline', label: '📋 Pipeline' },
+          { id: 'priority', label: '🎯 Priority Queue' },
+          { id: 'team', label: '👥 Team' },
+          { id: 'templates', label: '📝 Templates' },
+          { id: 'reports', label: '📈 Reports' },
+          { id: 'settings', label: '⚙️ Settings' }
+        ].map(tab => (
+          <button key={tab.id} className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+      
+      <main className="main-content">{renderContent()}</main>
+      
+      <NotificationsPanel show={showNotifications} onClose={() => setShowNotifications(false)} />
+      
+      {selectedProperty && (
+        <PropertyDetailModal 
+          property={selectedProperty}
+          onClose={() => setSelectedProperty(null)}
+          onUpdate={(p) => { setProperties(properties.map(pr => pr.id === p.id ? p : pr)); setSelectedProperty(p); }}
+        />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<FlipFinderPro />);
+  </script>
+  
+  <style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-tertiary: #1a1a25;
+  --bg-card: #15151f;
+  --border-color: #2a2a3a;
+  --text-primary: #ffffff;
+  --text-secondary: #a0a0b0;
+  --text-muted: #606070;
+  --accent-primary: #6366f1;
+  --accent-secondary: #8b5cf6;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --hot: #ef4444;
+  --warm: #f59e0b;
+  --nurture: #06b6d4;
+  --monitor: #6b7280;
+  --gradient-1: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Space Grotesk', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.app-container { min-height: 100vh; display: flex; flex-direction: column; }
+
+.header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo { display: flex; align-items: center; gap: 0.75rem; }
+
+.logo-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--gradient-1);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.logo-text {
+  font-size: 1.25rem;
+  font-weight: 700;
+  background: var(--gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.header-actions { display: flex; align-items: center; gap: 1rem; }
+
+.notification-btn {
+  position: relative;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.notification-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+
+.notification-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: var(--danger);
+  color: white;
+  font-size: 0.65rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.nav-tabs {
+  display: flex;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 1.5rem;
+  gap: 0.25rem;
+  overflow-x: auto;
+}
+
+.nav-tab {
+  padding: 1rem 1.25rem;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.nav-tab:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.nav-tab.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+
+.main-content { flex: 1; padding: 1.5rem; overflow-y: auto; }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-title { font-size: 1rem; font-weight: 600; }
+.card-body { padding: 1.25rem; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: var(--gradient-1);
+  color: white;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4); }
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover { background: var(--border-color); }
+.btn-sm { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
+
+.form-group { margin-bottom: 1rem; }
+.form-label { display: block; font-size: 0.8125rem; font-weight: 500; color: var(--text-secondary); margin-bottom: 0.375rem; }
+
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-checkbox-group { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.form-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.form-checkbox-label:hover { border-color: var(--accent-primary); }
+.form-checkbox-label.checked { background: rgba(99, 102, 241, 0.15); border-color: var(--accent-primary); color: var(--accent-primary); }
+
+.priority-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.priority-hot { background: rgba(239, 68, 68, 0.15); color: var(--hot); border: 1px solid rgba(239, 68, 68, 0.3); }
+.priority-warm { background: rgba(245, 158, 11, 0.15); color: var(--warm); border: 1px solid rgba(245, 158, 11, 0.3); }
+.priority-nurture { background: rgba(6, 182, 212, 0.15); color: var(--nurture); border: 1px solid rgba(6, 182, 212, 0.3); }
+.priority-monitor { background: rgba(107, 114, 128, 0.15); color: var(--monitor); border: 1px solid rgba(107, 114, 128, 0.3); }
+
+.property-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.25rem; }
+
+.property-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.property-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: var(--accent-primary); }
+
+.property-image { height: 180px; background: var(--bg-tertiary); position: relative; overflow: hidden; }
+.property-image img { width: 100%; height: 100%; object-fit: cover; }
+
+.property-badges { position: absolute; top: 0.75rem; left: 0.75rem; right: 0.75rem; display: flex; flex-wrap: wrap; gap: 0.375rem; }
+
+.property-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.property-badge.distress { background: rgba(239, 68, 68, 0.85); color: white; }
+.property-badge.vacant { background: rgba(245, 158, 11, 0.85); color: white; }
+
+.property-score {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: var(--shadow-md);
+}
+
+.property-score.hot { background: var(--hot); color: white; }
+.property-score.warm { background: var(--warm); color: white; }
+.property-score.nurture { background: var(--nurture); color: white; }
+.property-score.monitor { background: var(--monitor); color: white; }
+
+.property-content { padding: 1rem; }
+.property-address { font-size: 1rem; font-weight: 600; margin-bottom: 0.25rem; }
+.property-location { font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 0.75rem; }
+.property-specs { display: flex; gap: 1rem; margin-bottom: 0.75rem; font-size: 0.8125rem; color: var(--text-secondary); }
+.property-spec { display: flex; align-items: center; gap: 0.25rem; }
+
+.property-pricing {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.price-item { text-align: center; }
+.price-label { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.price-value { font-size: 1rem; font-weight: 600; color: var(--text-primary); }
+.price-value.success { color: var(--success); }
+.price-value.danger { color: var(--danger); }
+
+.search-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+
+.search-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-1);
+}
+
+.stat-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+.stat-value { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
+.stat-label { font-size: 0.8125rem; color: var(--text-secondary); }
+.stat-change { font-size: 0.75rem; margin-top: 0.5rem; }
+.stat-change.positive { color: var(--success); }
+
+.pipeline-container { display: flex; gap: 1rem; overflow-x: auto; padding-bottom: 1rem; }
+
+.pipeline-column {
+  min-width: 280px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.pipeline-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pipeline-title { display: flex; align-items: center; gap: 0.5rem; }
+.pipeline-dot { width: 10px; height: 10px; border-radius: 50%; }
+.pipeline-count { background: var(--bg-tertiary); padding: 0.125rem 0.5rem; border-radius: 10px; font-size: 0.75rem; color: var(--text-secondary); }
+.pipeline-cards { padding: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; max-height: 500px; overflow-y: auto; }
+
+.pipeline-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pipeline-card:hover { border-color: var(--accent-primary); transform: translateY(-2px); }
+.pipeline-card-address { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; }
+.pipeline-card-city { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+.pipeline-card-price { font-size: 0.875rem; font-weight: 600; color: var(--success); }
+
+.pipeline-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.modal-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.modal-body { flex: 1; overflow-y: auto; padding: 1.5rem; }
+
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+
+.detail-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.25rem;
+}
+
+.detail-section-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 0.8125rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.detail-row:last-child { border-bottom: none; }
+.detail-label { color: var(--text-secondary); }
+.detail-value { font-weight: 500; text-align: right; }
+
+.team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
+
+.team-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.team-card:hover { border-color: var(--accent-primary); transform: translateY(-2px); }
+.team-avatar { font-size: 3rem; margin-bottom: 1rem; }
+.team-name { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.25rem; }
+.team-role { font-size: 0.8125rem; color: var(--text-secondary); margin-bottom: 1rem; }
+
+.team-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.team-stat-value { font-size: 1.25rem; font-weight: 700; }
+.team-stat-label { font-size: 0.6875rem; color: var(--text-muted); text-transform: uppercase; }
+
+.templates-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+
+.template-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.template-card:hover { border-color: var(--accent-primary); transform: translateY(-2px); }
+.template-category { font-size: 0.6875rem; text-transform: uppercase; color: var(--accent-primary); letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+.template-name { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+.template-preview { font-size: 0.8125rem; color: var(--text-secondary); }
+
+.reports-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
+
+.report-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.report-card:hover { border-color: var(--accent-primary); box-shadow: var(--shadow-md); }
+.report-icon { font-size: 2rem; margin-bottom: 1rem; }
+.report-title { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+.report-description { font-size: 0.8125rem; color: var(--text-secondary); }
+
+.settings-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.settings-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.notifications-panel {
+  position: fixed;
+  top: 60px;
+  right: 1rem;
+  width: 380px;
+  max-height: 500px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  overflow: hidden;
+}
+
+.notifications-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notifications-list { max-height: 400px; overflow-y: auto; }
+
+.notification-item {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.notification-item:hover { background: var(--bg-tertiary); }
+.notification-item.unread { background: rgba(99, 102, 241, 0.05); }
+
+.notification-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.notification-icon.hot { background: rgba(239, 68, 68, 0.15); }
+.notification-icon.price { background: rgba(16, 185, 129, 0.15); }
+.notification-icon.followup { background: rgba(245, 158, 11, 0.15); }
+.notification-icon.match { background: rgba(99, 102, 241, 0.15); }
+
+.notification-content { flex: 1; min-width: 0; }
+.notification-title { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; }
+.notification-message { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+.notification-time { font-size: 0.6875rem; color: var(--text-muted); }
+
+.text-success { color: var(--success) !important; }
+.text-danger { color: var(--danger) !important; }
+.text-warning { color: var(--warning) !important; }
+.text-muted { color: var(--text-muted) !important; }
+
+.mt-1 { margin-top: 0.5rem; }
+.mt-2 { margin-top: 1rem; }
+.mt-3 { margin-top: 1.5rem; }
+.mb-1 { margin-bottom: 0.5rem; }
+.mb-2 { margin-bottom: 1rem; }
+.mb-3 { margin-bottom: 1.5rem; }
+
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-1 { gap: 0.5rem; }
+.gap-2 { gap: 1rem; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  </style>
+</body>
+</html>
